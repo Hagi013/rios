@@ -1,9 +1,36 @@
 [package]
 name = "rios"
 version = "0.1.0"
-authors = ["Hagi013 <generativepassion@gmail.com>"]
+authors = ["hagiwara"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[profile.dev]
+panic = "abort"
+opt-level = 'z'
+debug = true
+lto = true
+
+[profile.release]
+panic = "abort"
+opt-level = 3
+lto = true
+
+[profile.test]
+opt-level = 'z'
+debug = 2
+rpath = false
+lto = false
+debug-assertions = true
+codegen-units = 16
+panic = 'unwind'
+incremental = true
+overflow-checks = true
 
 [dependencies]
+
+[package.metadata.cargo-xbuild]
+memcpy = true
