@@ -48,13 +48,12 @@ impl Graphic {
         let eflags: u32 = asmfunc::io_load_eflags();
         asmfunc::io_cli(); // 割り込みを禁止する
         asmfunc::io_out8(0x03c8, 0);
-
         for rgb in RGB::iterator() {
             asmfunc::io_out8(0x03c9, (rgb.r() >> 2) as u8);
             asmfunc::io_out8(0x03c9, (rgb.b() >> 2) as u8);
             asmfunc::io_out8(0x03c9, (rgb.b() >> 2) as u8);
         }
-         asmfunc::io_store_eflags(eflags);
+        asmfunc::io_store_eflags(eflags);
     }
 
     pub fn init_screen() {
