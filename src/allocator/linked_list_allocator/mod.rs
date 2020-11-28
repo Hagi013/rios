@@ -1,5 +1,5 @@
 use core::mem;
-use core::alloc::{Layout, AllocErr, MemoryBlock};
+use core::alloc::{Layout, AllocError as AllocErr};
 use core::ptr::NonNull;
 
 pub mod hole;
@@ -35,7 +35,7 @@ impl Heap {
         }
     }
 
-    pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<MemoryBlock, AllocErr> {
+    pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         let mut size = layout.size();
         if size < HoleList::min_size() {
             size = HoleList::min_size();

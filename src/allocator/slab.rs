@@ -1,5 +1,6 @@
-use core::alloc::{ AllocErr, Layout, MemoryBlock };
+use core::alloc::{ AllocError as AllocErr, Layout };
 use core::ptr::NonNull;
+use core::slice::SliceIndex;
 
 //use super::Graphic;
 //use super::super::Printer;
@@ -31,14 +32,17 @@ impl Slab {
         }
     }
 
-    pub fn allocate(&mut self, layout: Layout) -> Result<MemoryBlock, AllocErr> {
+    pub fn allocate(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         match self.free_block_list.pop() {
-            Some(block) => Ok(unsafe {
-                MemoryBlock {
-                    ptr: NonNull::new_unchecked(block.addr() as *mut u8),
-                    size: layout.size()
-                }
-            }),
+            // Some(block) => Ok(unsafe {
+            //     MemoryBlock {
+            //         ptr: NonNull::new_unchecked(block.addr() as *mut u8),
+            //         size: layout.size()
+            //     }
+            // }),r
+            Some(block) => {
+                Ok(unsafe { NonNull::slice_from_raw_parts(NonNull::new_unchecked(block.addr() as *mut u8), layout.size()) })
+            },
             None => Err(AllocErr),
         }
     }

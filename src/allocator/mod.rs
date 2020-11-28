@@ -2,13 +2,14 @@
 
 use core::ops::Deref;
 use core::ptr::NonNull;
-use core::alloc::{ AllocRef as Alloc, AllocErr, Layout, GlobalAlloc, AllocInit, MemoryBlock };
+use core::alloc::{ AllocRef as Alloc, AllocError as AllocErr, Layout, GlobalAlloc };
 
 use super::spin::mutex::Mutex;
 
 pub mod slab;
 
 use self::slab::Slab;
+use core::cell::RefCell;
 
 pub mod linked_list_allocator;
 pub mod frame_allocator;
@@ -31,14 +32,14 @@ pub enum HeapAllocator {
 }
 
 pub struct Heap {
-    slab_64_bytes: Slab,
-    slab_128_bytes: Slab,
-    slab_256_bytes: Slab,
-    slab_512_bytes: Slab,
-    slab_1024_bytes: Slab,
-    slab_2048_bytes: Slab,
-    slab_4096_bytes: Slab,
-    linked_list_allocator: linked_list_allocator::Heap,
+    slab_64_bytes: RefCell<Slab>,
+    slab_128_bytes: RefCell<Slab>,
+    slab_256_bytes: RefCell<Slab>,
+    slab_512_bytes: RefCell<Slab>,
+    slab_1024_bytes: RefCell<Slab>,
+    slab_2048_bytes: RefCell<Slab>,
+    slab_4096_bytes: RefCell<Slab>,
+    linked_list_allocator: RefCell<linked_list_allocator::Heap>,
 }
 
 impl Heap {
@@ -57,53 +58,53 @@ impl Heap {
         );
         let slab_size: usize = heap_size / NUM_OF_SLABS;
         Heap {
-            slab_64_bytes: Slab::new(heap_start_addr, slab_size, 64),
-            slab_128_bytes: Slab::new(heap_start_addr + slab_size, slab_size, 128),
-            slab_256_bytes: Slab::new(heap_start_addr + 2 * slab_size, slab_size, 256),
-            slab_512_bytes: Slab::new(heap_start_addr + 3 * slab_size, slab_size, 512),
-            slab_1024_bytes: Slab::new(heap_start_addr + 4 * slab_size, slab_size, 1024),
-            slab_2048_bytes: Slab::new(heap_start_addr + 5 * slab_size, slab_size, 2048),
-            slab_4096_bytes: Slab::new(heap_start_addr + 6 * slab_size, slab_size, 4096),
-            linked_list_allocator: linked_list_allocator::Heap::new(heap_start_addr + 7 * slab_size, slab_size),
+            slab_64_bytes: RefCell::new(Slab::new(heap_start_addr, slab_size, 64)),
+            slab_128_bytes: RefCell::new(Slab::new(heap_start_addr + slab_size, slab_size, 128)),
+            slab_256_bytes: RefCell::new(Slab::new(heap_start_addr + 2 * slab_size, slab_size, 256)),
+            slab_512_bytes: RefCell::new(Slab::new(heap_start_addr + 3 * slab_size, slab_size, 512)),
+            slab_1024_bytes: RefCell::new(Slab::new(heap_start_addr + 4 * slab_size, slab_size, 1024)),
+            slab_2048_bytes: RefCell::new(Slab::new(heap_start_addr + 5 * slab_size, slab_size, 2048)),
+            slab_4096_bytes: RefCell::new(Slab::new(heap_start_addr + 6 * slab_size, slab_size, 4096)),
+            linked_list_allocator: RefCell::new(linked_list_allocator::Heap::new(heap_start_addr + 7 * slab_size, slab_size)),
         }
     }
 
-    pub unsafe fn grow(&mut self, mem_start_addr: usize, mem_size: usize, slab: HeapAllocator) {
+    pub unsafe fn grow(&self, mem_start_addr: usize, mem_size: usize, slab: HeapAllocator) {
         match slab {
-            HeapAllocator::Slab64Bytes => self.slab_64_bytes.grow(mem_start_addr, mem_size),
-            HeapAllocator::Slab128Bytes => self.slab_128_bytes.grow(mem_start_addr, mem_size),
-            HeapAllocator::Slab256Bytes => self.slab_256_bytes.grow(mem_start_addr, mem_size),
-            HeapAllocator::Slab512Bytes => self.slab_512_bytes.grow(mem_start_addr, mem_size),
-            HeapAllocator::Slab1024Bytes => self.slab_1024_bytes.grow(mem_start_addr, mem_size),
-            HeapAllocator::Slab2048Bytes => self.slab_2048_bytes.grow(mem_start_addr, mem_size),
-            HeapAllocator::Slab4096Bytes => self.slab_4096_bytes.grow(mem_start_addr, mem_size),
-            HeapAllocator::LinkedListAllocator => self.linked_list_allocator.extend(mem_size),
+            HeapAllocator::Slab64Bytes => self.slab_64_bytes.borrow_mut().grow(mem_start_addr, mem_size),
+            HeapAllocator::Slab128Bytes => self.slab_128_bytes.borrow_mut().grow(mem_start_addr, mem_size),
+            HeapAllocator::Slab256Bytes => self.slab_256_bytes.borrow_mut().grow(mem_start_addr, mem_size),
+            HeapAllocator::Slab512Bytes => self.slab_512_bytes.borrow_mut().grow(mem_start_addr, mem_size),
+            HeapAllocator::Slab1024Bytes => self.slab_1024_bytes.borrow_mut().grow(mem_start_addr, mem_size),
+            HeapAllocator::Slab2048Bytes => self.slab_2048_bytes.borrow_mut().grow(mem_start_addr, mem_size),
+            HeapAllocator::Slab4096Bytes => self.slab_4096_bytes.borrow_mut().grow(mem_start_addr, mem_size),
+            HeapAllocator::LinkedListAllocator => self.linked_list_allocator.borrow_mut().extend(mem_size),
         }
     }
 
-    pub fn allocate(&mut self, layout: Layout) -> Result<MemoryBlock, AllocErr> {
+    pub fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         match Heap::layout_to_allocator(&layout) {
-            HeapAllocator::Slab64Bytes => self.slab_64_bytes.allocate(layout),
-            HeapAllocator::Slab128Bytes => self.slab_128_bytes.allocate(layout),
-            HeapAllocator::Slab256Bytes => self.slab_256_bytes.allocate(layout),
-            HeapAllocator::Slab512Bytes => self.slab_512_bytes.allocate(layout),
-            HeapAllocator::Slab1024Bytes => self.slab_1024_bytes.allocate(layout),
-            HeapAllocator::Slab2048Bytes => self.slab_2048_bytes.allocate(layout),
-            HeapAllocator::Slab4096Bytes => self.slab_4096_bytes.allocate(layout),
-            HeapAllocator::LinkedListAllocator => self.linked_list_allocator.allocate_first_fit(layout),
+            HeapAllocator::Slab64Bytes => self.slab_64_bytes.borrow_mut().allocate(layout),
+            HeapAllocator::Slab128Bytes => self.slab_128_bytes.borrow_mut().allocate(layout),
+            HeapAllocator::Slab256Bytes => self.slab_256_bytes.borrow_mut().allocate(layout),
+            HeapAllocator::Slab512Bytes => self.slab_512_bytes.borrow_mut().allocate(layout),
+            HeapAllocator::Slab1024Bytes => self.slab_1024_bytes.borrow_mut().allocate(layout),
+            HeapAllocator::Slab2048Bytes => self.slab_2048_bytes.borrow_mut().allocate(layout),
+            HeapAllocator::Slab4096Bytes => self.slab_4096_bytes.borrow_mut().allocate(layout),
+            HeapAllocator::LinkedListAllocator => self.linked_list_allocator.borrow_mut().allocate_first_fit(layout),
         }
     }
 
-    pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    pub unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         match Heap::layout_to_allocator(&layout) {
-            HeapAllocator::Slab64Bytes => self.slab_64_bytes.deallocate(ptr),
-            HeapAllocator::Slab128Bytes => self.slab_128_bytes.deallocate(ptr),
-            HeapAllocator::Slab256Bytes => self.slab_256_bytes.deallocate(ptr),
-            HeapAllocator::Slab512Bytes => self.slab_512_bytes.deallocate(ptr),
-            HeapAllocator::Slab1024Bytes => self.slab_1024_bytes.deallocate(ptr),
-            HeapAllocator::Slab2048Bytes => self.slab_2048_bytes.deallocate(ptr),
-            HeapAllocator::Slab4096Bytes => self.slab_4096_bytes.deallocate(ptr),
-            HeapAllocator::LinkedListAllocator => self.linked_list_allocator.deallocate(ptr, layout),
+            HeapAllocator::Slab64Bytes => self.slab_64_bytes.borrow_mut().deallocate(ptr),
+            HeapAllocator::Slab128Bytes => self.slab_128_bytes.borrow_mut().deallocate(ptr),
+            HeapAllocator::Slab256Bytes => self.slab_256_bytes.borrow_mut().deallocate(ptr),
+            HeapAllocator::Slab512Bytes => self.slab_512_bytes.borrow_mut().deallocate(ptr),
+            HeapAllocator::Slab1024Bytes => self.slab_1024_bytes.borrow_mut().deallocate(ptr),
+            HeapAllocator::Slab2048Bytes => self.slab_2048_bytes.borrow_mut().deallocate(ptr),
+            HeapAllocator::Slab4096Bytes => self.slab_4096_bytes.borrow_mut().deallocate(ptr),
+            HeapAllocator::LinkedListAllocator => self.linked_list_allocator.borrow_mut().deallocate(ptr, layout),
         }
     }
 
@@ -144,11 +145,11 @@ impl Heap {
 }
 
 unsafe impl Alloc for Heap {
-    fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+    fn alloc(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         self.allocate(layout)
     }
 
-    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
         self.deallocate(ptr, layout);
     }
 
@@ -191,7 +192,7 @@ impl LockedHeap {
 //}
 
 unsafe impl<'a> Alloc for &'a LockedHeap {
-    fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+    fn alloc(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
 //        if let Some(ref mut heap) = *self.0.lock() {
 //    unsafe fn alloc(&self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
         if let Some(ref mut heap) = *HEAP.lock() {
@@ -201,7 +202,7 @@ unsafe impl<'a> Alloc for &'a LockedHeap {
         }
     }
 
-    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
 //        if let Some(ref mut heap) = *self.0.lock() {
 //    unsafe fn dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
         if let Some(ref mut heap) = *HEAP.lock() {
@@ -226,7 +227,7 @@ unsafe impl GlobalAlloc for LockedHeap {
 //        if let Some(ref mut heap) = *self.0.lock() {
         if let Some(ref mut heap) = *HEAP.lock() {
             if let Ok(ref mut nnptr) = heap.allocate(layout) {
-                return nnptr.ptr.as_ptr();
+                return nnptr.as_ptr() as *mut u8;
             } else {
                 panic!("allocate: failed");
             }

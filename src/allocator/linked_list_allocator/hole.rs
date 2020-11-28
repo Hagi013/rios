@@ -1,4 +1,4 @@
-use alloc::alloc::{AllocErr, Layout, MemoryBlock};
+use alloc::alloc::{AllocError as AllocErr, Layout};
 use core::mem::size_of;
 use core::ptr::NonNull;
 
@@ -36,7 +36,7 @@ impl HoleList {
         }
     }
 
-    pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<MemoryBlock, AllocErr> {
+    pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         assert!(layout.size() >= Self::min_size());
         allocate_first_fit(&mut self.first, layout).map(|allocation| {
             if let Some(padding) = allocation.front_padding {
@@ -45,9 +45,12 @@ impl HoleList {
             if let Some(padding) = allocation.back_padding {
                 deallocate(&mut self.first, padding.addr, padding.size);
             }
-            MemoryBlock {
-                ptr: NonNull::new(allocation.info.addr as *mut u8).unwrap(),
-                size: layout.size(),
+            // MemoryBlock {
+            //     ptr: NonNull::new(allocation.info.addr as *mut u8).unwrap(),
+            //     size: layout.size(),
+            // }
+            unsafe {
+                NonNull::slice_from_raw_parts(NonNull::new_unchecked(allocation.info.addr as *mut u8), layout.size())
             }
         })
     }
