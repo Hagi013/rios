@@ -31,6 +31,24 @@ fn get_vram() -> &'static u32 {
 static FONTS: [u8; 4096] = hankaku::FONTS;
 static HANKAKU_TABLE: [&str; 0x80] = hankaku::HANKAKU_TABLE;
 static HANKAKU_SHIFT_TABLE: [&str; 0x80] = hankaku::HANKAKU_SHIFT_TABLE;
+static RGBS: [RGB; 16] = [
+    RGB::Black,          /*  0:黒 */
+    RGB::Red,            /*  1:明るい赤 */
+    RGB::Green,          /*  2:明るい緑 */
+    RGB::Yellow,         /*  3:明るい黄色 */
+    RGB::Blue,           /*  4:明るい青 */
+    RGB::Purple,         /*  5:明るい紫 */
+    RGB::LightBlue,      /*  6:明るい水色 */
+    RGB::White,          /*  7:白 */
+    RGB::Gray,           /*  8:明るい灰色 */
+    RGB::DarkRed,        /*  9:暗い赤 */
+    RGB::DarkGreen,      /* 10:暗い緑 */
+    RGB::DarkYellow,     /* 11:暗い黄色 */
+    RGB::DarkBlue,       /* 12:暗い青 */
+    RGB::DarkPurple,     /* 13:暗い紫 */
+    RGB::DarkLightBlue,  /* 14:暗い水色 */
+    RGB::DarkGray,       /* 15:暗い灰色 */
+];
 
 pub struct Graphic {}
 impl Graphic {
@@ -49,9 +67,12 @@ impl Graphic {
         asmfunc::io_cli(); // 割り込みを禁止する
         asmfunc::io_out8(0x03c8, 0);
         for rgb in RGB::iterator() {
-            asmfunc::io_out8(0x03c9, (rgb.r() >> 2) as u8);
-            asmfunc::io_out8(0x03c9, (rgb.b() >> 2) as u8);
-            asmfunc::io_out8(0x03c9, (rgb.b() >> 2) as u8);
+            // Graphic::putfont_asc(210, 0, 5, "00");
+            asmfunc::io_out8(0x03c9, (rgb.r() >> 2));
+            Graphic::putfont_asc(210, 0, 5, "aa");
+            asmfunc::io_out8(0x03c9, (rgb.g() >> 2));
+            Graphic::putfont_asc(210, 15, 5, "bb");
+            asmfunc::io_out8(0x03c9, (rgb.b() >> 2));
         }
         asmfunc::io_store_eflags(eflags);
     }
@@ -237,6 +258,7 @@ impl RGB {
             RGB::DarkPurple => RGBElement::new(0x84, 0x00, 0x84),
             RGB::DarkLightBlue => RGBElement::new(0x00, 0x84, 0x84),
             RGB::DarkGray => RGBElement::new(0x84, 0x84, 0x84),
+            _ => RGBElement::new(0x00, 0x00, 0x00),
         }
     }
 
@@ -268,25 +290,7 @@ impl RGB {
     fn b(&self) -> u8 { self.value().b }
 
     fn iterator() -> Iter<'static, RGB> {
-        static RGBS: [RGB; 16] = [
-            RGB::Black,          /*  0:黒 */
-            RGB::Red,            /*  1:明るい赤 */
-            RGB::Green,          /*  2:明るい緑 */
-            RGB::Yellow,         /*  3:明るい黄色 */
-            RGB::Blue,           /*  4:明るい青 */
-            RGB::Purple,         /*  5:明るい紫 */
-            RGB::LightBlue,      /*  6:明るい水色 */
-            RGB::White,          /*  7:白 */
-            RGB::Gray,           /*  8:明るい灰色 */
-            RGB::DarkRed,        /*  9:暗い赤 */
-            RGB::DarkGreen,      /* 10:暗い緑 */
-            RGB::DarkYellow,     /* 11:暗い黄色 */
-            RGB::DarkBlue,       /* 12:暗い青 */
-            RGB::DarkPurple,     /* 13:暗い紫 */
-            RGB::DarkLightBlue,  /* 14:暗い水色 */
-            RGB::DarkGray,       /* 15:暗い灰色 */
-        ];
-        return RGBS.into_iter();
+        RGBS.into_iter()
     }
 }
 

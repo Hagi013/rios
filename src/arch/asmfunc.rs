@@ -32,7 +32,8 @@ pub fn io_in8(port: i32) -> i32 {
     unsafe {
         llvm_asm!("
         mov eax, 0
-        in al, dx"
+        in al, dx
+        "
         : "={eax}"(res) // Output Operand
         : "{edx}"(port) // Input Operand
         : "memory"      // 変更される可能性があるレジスタ
@@ -194,7 +195,6 @@ pub fn set_pg_flag() {
             or eax, 0x80000000
             mov cr0, eax
             pop eax
-            ret
         "
         :
         :

@@ -15,14 +15,15 @@ asm:	$(BUILD_DIR)/ipl.bin \
 
 # make image file
 $(BUILD_DIR)/$(BUILD_NAME).img: $(BUILD_DIR)/ipl.bin $(BUILD_DIR)/$(BUILD_NAME).sys Makefile
-	mformat -f 1440 -C -B $(BUILD_DIR)/ipl.bin -i $(BUILD_DIR)/$(BUILD_NAME).img ::
-	mcopy -i $(BUILD_DIR)/$(BUILD_NAME).img $(BUILD_DIR)/$(BUILD_NAME).sys ::
+	/opt/homebrew-x86_64/bin/mformat -f 1440 -C -B $(BUILD_DIR)/ipl.bin -i $(BUILD_DIR)/$(BUILD_NAME).img ::
+	/opt/homebrew-x86_64/bin/mcopy -i $(BUILD_DIR)/$(BUILD_NAME).img $(BUILD_DIR)/$(BUILD_NAME).sys ::
 
 $(BUILD_DIR)/$(BUILD_NAME).sys: $(BUILD_DIR)/kernel.bin $(BUILD_DIR)/secondboot.bin
 	cat $(BUILD_DIR)/secondboot.bin $(BUILD_DIR)/kernel.bin > $(BUILD_DIR)/$(BUILD_NAME).sys
 
 $(BUILD_DIR)/kernel.bin: $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/librios.a $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/asmfunc.o $(KERNEL_DIR)/boot
-	$(TARGET_ARCH_i686)-ld --print-gc-sections --gc-sections -t -nostdlib -Tdata=0x00310000 -T $(KERNEL_DIR)/boot/kernel.ld -o $(BUILD_DIR)/kernel.bin $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/asmfunc.o --library-path=$(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE) -lrios -Map $(BUILD_DIR)/kernel.map --verbose
+#	$(TARGET_ARCH_i686)-ld --print-gc-sections --gc-sections -t -nostdlib -Tdata=0x00310000 -T $(KERNEL_DIR)/boot/kernel.ld -o $(BUILD_DIR)/kernel.bin $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/asmfunc.o --library-path=$(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE) -lrios -Map $(BUILD_DIR)/kernel.map --verbose
+	$(TARGET_ARCH_i686)-ld -nostdlib -T $(KERNEL_DIR)/boot/kernel.ld -o $(BUILD_DIR)/kernel.bin $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/asmfunc.o --library-path=$(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE) -lrios -Map $(BUILD_DIR)/kernel.map --verbose
 
 $(BUILD_DIR)/ipl.bin: $(KERNEL_DIR)/boot
 	nasm -f bin -o $(BUILD_DIR)/ipl.bin $(KERNEL_DIR)/boot/ipl.asm -l $(BUILD_DIR)/ipl.lst
@@ -32,7 +33,7 @@ $(BUILD_DIR)/secondboot.bin: $(KERNEL_DIR)/boot
 
 #kernel
 $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/librios.a: ./$(KERNEL_DIR)/$(TARGET_ARCH_i686).json Cargo.toml $(KERNEL_DIR)/*.rs
-	cd ${KERNEL_DIR}; RUST_TARGET_PATH=$(PWD); set RUST_BACKTRACE=1; rustup run nightly `which cargo` xbuild --target $(TARGET_ARCH_i686).json -v
+	cd ${KERNEL_DIR}; RUST_TARGET_PATH=$(PWD); set RUST_BACKTRACE=1;rustup run nightly `which cargo` xbuild --target $(TARGET_ARCH_i686).json -v
 
 $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/%.o: $(KERNEL_DIR)/boot
 	nasm -f elf32 $(KERNEL_DIR)/boot/asmfunc.asm -o $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.o -l $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.lst
