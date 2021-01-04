@@ -2,7 +2,6 @@
 ; TAB=4
 
 ; [INSTRSET "i486p"]              ; 486の命令まで使いたいという記述
-
 VBEMODE equ     0x105             ; 1024 x 768 x 8bitカラー
 ; (画面モード一覧)
 ; 0x100 :   640  x  400 x 8bitカラー
@@ -13,6 +12,11 @@ VBEMODE equ     0x105             ; 1024 x 768 x 8bitカラー
 ; 0x107 :   1200 x 1024 x 8bitカラー
 
 INITOS  equ     0x00280000      ; OS本体部分のロード先
+;STACK   equ     0x00480000      ; Stack領域
+;STACK   equ     0x0057ffff      ; Stack領域
+;STACK   equ     0x00300000      ; Stack領域
+STACK  equ      0x003fffff      ; Stack領域
+;STACK   equ     0x00310000      ; Stack領域
 DSKCAC  equ     0x00100000      ; ディスクキャッシュの場所
 DSKCAC0 equ     0x00008000      ; ディスクキャッシュの場所(リアルモード)
 
@@ -112,7 +116,7 @@ keystatus:
         out     0x60, al
         call    waitkbdout
 
-; プロテクトモードへの行こう
+; プロテクトモードへの移行
 
         LGDT    [GDTR0]             ; 暫定のGDTを設定
         mov     eax, cr0
@@ -130,10 +134,11 @@ pipelineflush:
 
 ; OS本体の転送
 
-        mov     esi, initos         ; 転送元
+        mov     esi, init_os         ; 転送元
         mov     edi, INITOS         ; 転送先
-;        mov     ecx, 512*1024*4
-        mov     ecx, 2048*1024*4    ; 2MB
+        mov     ecx, 512*1024/4     ; 512KB
+;        mov     ecx, 2048*1024/4    ; 2MB
+;        jmp     $
         call    memcpy
 
 ; ついでにディスクデータも本来の位置へ転送
@@ -160,31 +165,24 @@ pipelineflush:
 
 ; initosの起動
 
-        mov     ebx, INITOS
-        mov     ecx, [ebx+16]
-        add     ecx, 3              ; ecx += 3
-        shr     ecx, 2              ; ecx /= 4;
-        jz      skip                ; 転送すべきものがない
-        mov     esi, [ebx+20]       ; 転送元
-        add     esi, ebx
-        mov     edi, [ebx+12]       ; 転送先
-        call    memcpy
-skip:
-        mov     esp, [ebx+12]       ; スタック初期値
-        jmp     DWORD 2*8:0x0000001b    ; .sysのヘッダのjmp命令のある場所へジャンプ(2番目のセグメントの0x001bへジャンプ)
+;        mov     ebx, INITOS
+;        mov     ecx, [ebx+16]
+;        add     ecx, 3              ; ecx += 3
+;        shr     ecx, 2              ; ecx /= 4;
+;        jz      skip                ; 転送すべきものがない
+;        mov     esi, [ebx+20]       ; 転送元
+;        add     esi, ebx
+;        mov     edi, [ebx+12]       ; 転送先
+;        call    memcpy
+;skip:
+        mov     esp, STACK           ; スタック初期値
+;        jmp     $                    ; debug
+        jmp     DWORD 2*8:0          ; .sysへジャンプ
 
 waitkbdout:
         in      al, 0x64
         and     al, 0x02
         jnz     waitkbdout          ; andの結果が0でなければwaitkbdoutへ
-        ret
-
-initpaging:
-        mov     eax, 0xd7f000
-        mov     cr3, eax
-        mov     eax, cr0
-        or      eax, 0x80000000
-        mov     cr0, eax
         ret
 
 memcpy:
@@ -210,4 +208,4 @@ GDTR0:
         dd      GDT0
 
         alignb  16, db 0
-initos:
+init_os:
