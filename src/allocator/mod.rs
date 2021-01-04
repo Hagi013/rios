@@ -2,7 +2,7 @@
 
 use core::ops::Deref;
 use core::ptr::NonNull;
-use core::alloc::{ AllocRef as Alloc, AllocError as AllocErr, Layout, GlobalAlloc };
+use core::alloc::{ Allocator as Alloc, AllocError as AllocErr, Layout, GlobalAlloc };
 
 use super::spin::mutex::Mutex;
 
@@ -145,11 +145,11 @@ impl Heap {
 }
 
 unsafe impl Alloc for Heap {
-    fn alloc(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         self.allocate(layout)
     }
 
-    unsafe fn dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         self.deallocate(ptr, layout);
     }
 
@@ -192,7 +192,7 @@ impl LockedHeap {
 //}
 
 unsafe impl<'a> Alloc for &'a LockedHeap {
-    fn alloc(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
 //        if let Some(ref mut heap) = *self.0.lock() {
 //    unsafe fn alloc(&self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
         if let Some(ref mut heap) = *HEAP.lock() {
@@ -202,7 +202,7 @@ unsafe impl<'a> Alloc for &'a LockedHeap {
         }
     }
 
-    unsafe fn dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
 //        if let Some(ref mut heap) = *self.0.lock() {
 //    unsafe fn dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
         if let Some(ref mut heap) = *HEAP.lock() {

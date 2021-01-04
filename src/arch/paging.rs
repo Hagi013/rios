@@ -1,5 +1,5 @@
 #![feature(allocator_api)]
-use core::alloc::{Layout, AllocRef as Alloc};
+use core::alloc::{Layout, Allocator as Alloc};
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ptr;
@@ -206,7 +206,7 @@ where
         let ptr = self.global_allocator
             .as_mut()
             .unwrap()
-            .alloc(layout)
+            .allocate(layout)
             .or(Err("Error in PageTableImpl.allocate_frame when call self.table_allocator.alloc().".to_owned()))?
             .as_ptr();
         Ok(ptr as *const *mut [u8] as usize as u32)

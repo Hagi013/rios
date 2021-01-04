@@ -1,5 +1,5 @@
 use core::ptr::NonNull;
-use core::alloc::{ AllocRef as Alloc, AllocError as AllocErr, Layout };
+use core::alloc::{ Allocator as Alloc, AllocError as AllocErr, Layout };
 
 use crate::spin::mutex::Mutex;
 use super::Heap;
@@ -30,7 +30,7 @@ impl DerefMut for LockedFrameHeap {
 }
 
 unsafe impl<'a> Alloc for &'a LockedFrameHeap {
-    fn alloc(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         if let Some(ref mut heap) = *self.0.lock() {
             heap.allocate(layout)
         } else {
@@ -38,7 +38,7 @@ unsafe impl<'a> Alloc for &'a LockedFrameHeap {
         }
     }
 
-    unsafe fn dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         if let Some(ref mut heap) = *self.0.lock() {
             heap.deallocate(ptr, layout)
         } else {
