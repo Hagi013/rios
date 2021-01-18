@@ -62,7 +62,7 @@ impl MouseBuf {
         if self.phase == 2 { /* マウスの2バイト目を待っている段階 */
             self.buf[1] = data;
             self.phase = 3;
-            return Ok((0));
+            return Ok(0);
         }
         if self.phase == 3 { /* マウスの3バイト目を待っている段階 */
             self.buf[2] = data;
