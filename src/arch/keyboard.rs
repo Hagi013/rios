@@ -1,7 +1,9 @@
 use core::ptr;
 
 use super::asmfunc;
-//use super::graphic::Graphic;
+// use super::graphic::Graphic;
+// use super::super::Printer;
+// use core::fmt::Write;
 
 use super::pic::PIC0_IMR;
 use super::pic::PIC0_OCW2;
@@ -16,9 +18,6 @@ use super::pic::wait_kbc_sendready;
 use super::super::queue::SimpleQueue;
 use alloc::borrow::ToOwned;
 
-use super::super::Printer;
-use core::fmt::Write;
-
 static mut KEYBOARD_QUEUE: Option<SimpleQueue<i32>> = None;
 
 /* PIC1とキーボードを許可(11111001) */
@@ -27,7 +26,7 @@ pub fn allow_pic1_keyboard_int() {
     asmfunc::io_out8(PORT_KEYCMD, KEYCMD_WRITE_MODE);
     wait_kbc_sendready();
     asmfunc::io_out8(PORT_KEYDAT, KBC_MODE);
-    asmfunc::io_out8(PIC0_IMR, 0xf8);
+    asmfunc::io_out8(PIC0_IMR, 0xf8); /* PITとPIC1とキーボードを許可(11111001) */
     unsafe {
         let queue: SimpleQueue<i32> = SimpleQueue::new();
         KEYBOARD_QUEUE = Some(queue);
