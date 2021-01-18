@@ -69,9 +69,7 @@ impl Graphic {
         for rgb in RGB::iterator() {
             // Graphic::putfont_asc(210, 0, 5, "00");
             asmfunc::io_out8(0x03c9, (rgb.r() >> 2));
-            Graphic::putfont_asc(210, 0, 5, "aa");
             asmfunc::io_out8(0x03c9, (rgb.g() >> 2));
-            Graphic::putfont_asc(210, 15, 5, "bb");
             asmfunc::io_out8(0x03c9, (rgb.b() >> 2));
         }
         asmfunc::io_store_eflags(eflags);
