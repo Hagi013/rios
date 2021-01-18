@@ -99,8 +99,6 @@ fn init_heap() {
 #[start]
 #[no_mangle]
 pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
-    // loop {}
-    Graphic::putfont_asc(210, 150, 5, "rio-os, rio-os , rio-os"); //
     Graphic::init();
     pic::init_pic();
     let dsc_tbl: DscTbl = DscTbl::init_gdt_idt();
@@ -111,72 +109,72 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     // let page_tmpl_impl: PageTableImpl<&LockedHeap> = unsafe { page_tmpl_impl.unwrap().set_allocator(&ALLOCATOR) };
     // init_paging(page_tmpl_impl);
     // paging_on();
-    loop {}
+    // loop {}
 
-    // init_heap();
-    // Graphic::putfont_asc(210, 85, 10, "-1-1-1-1");
+    init_heap();
+    Graphic::putfont_asc(210, 85, 0, "-1-1-1-1");
     // {
     //     let page_tmpl_impl = unsafe { PageTableImpl::initialize(&*TABLE_ALLOCATOR, &ALLOCATOR) };
     //     init_paging(page_tmpl_impl.unwrap());
     // }
-    // Graphic::putfont_asc(210, 100, 10, "0000");
-    //
-    //
-    // Graphic::putfont_asc(210, 150, 10, "rio-os");
-    // let mut window_manager: WindowsManager = WindowsManager::new();
-    // timer_init();
-    // keyboard::allow_pic1_keyboard_int();
-    // mouse::allow_mouse_int();
-    //
-    // let mouse: MouseGraphic = MouseGraphic::new();
-    // let mouse_state = mouse.init_mouse_cursor(14);
-    //
-    // let mut mouse_window: *mut Window = window_manager.create_window(mouse_state.1, mouse_state.2, mouse_state.3, mouse_state.4, mouse_state.0).unwrap();
-    // let mut idx: u32 = 10;
-    //
-    // loop {
-    //     asmfunc::io_cli();
-    //     if !keyboard::is_existing() && !mouse::is_existing() {
-    //         asmfunc::io_stihlt();
-    //         continue;
-    //     }
-    //     if keyboard::is_existing() {
-    //         match keyboard::get_data() {
-    //             Ok(data) => {
-    //                 asmfunc::io_sti();
-    //                 Graphic::putfont_asc_from_keyboard(idx, 15, 10, data);
-    //             },
-    //             Err(_) => asmfunc::io_sti(),
-    //         };
-    //         idx += 8;
-    //     }
-    //     if mouse::is_existing() {
-    //         match mouse::get_data() {
-    //             Ok(data) => {
-    //                 asmfunc::io_sti();
-    //                 match data {
-    //                     Some(status) => {
-    //                         let x: i32 = status.1;
-    //                         let y: i32 = status.2;
-    //                         mouse_window = match window_manager.move_window(mouse_window, x, y) {
-    //                             Ok(m_w) => m_w,
-    //                             Err(message) => {
-    //                                 Graphic::putfont_asc(200, 200, 10, &message);
-    //                                 mouse_window
-    //                             }
-    //                         };
-    //                     },
-    //                     None => {},
-    //                 }
-    //             },
-    //             Err(message) => {
-    //                 asmfunc::io_sti();
-    //                 let mut printer = Printer::new(200, 215, 10);
-    //                 write!(printer, "{:?}", message).unwrap();
-    //             },
-    //         };
-    //     }
-    // }
+    Graphic::putfont_asc(210, 100, 0, "0000");
+
+    let mut window_manager: WindowsManager = WindowsManager::new();
+    timer_init();
+    Graphic::putfont_asc(210, 175, 0, "rio-os"); //
+    keyboard::allow_pic1_keyboard_int();
+    mouse::allow_mouse_init();
+
+
+    let mouse: MouseGraphic = MouseGraphic::new();
+    let mouse_state = mouse.init_mouse_cursor(14);
+
+    let mut mouse_window: *mut Window = window_manager.create_window(mouse_state.1, mouse_state.2, mouse_state.3, mouse_state.4, mouse_state.0).unwrap();
+    let mut idx: u32 = 10;
+
+    loop {
+        asmfunc::io_cli();
+        if !keyboard::is_existing() && !mouse::is_existing() {
+            asmfunc::io_stihlt();
+            continue;
+        }
+        if keyboard::is_existing() {
+            match keyboard::get_data() {
+                Ok(data) => {
+                    asmfunc::io_sti();
+                    Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
+                },
+                Err(_) => asmfunc::io_sti(),
+            };
+            idx += 8;
+        }
+        if mouse::is_existing() {
+            match mouse::get_data() {
+                Ok(data) => {
+                    asmfunc::io_sti();
+                    match data {
+                        Some(status) => {
+                            let x: i32 = status.1;
+                            let y: i32 = status.2;
+                            mouse_window = match window_manager.move_window(mouse_window, x, y) {
+                                Ok(m_w) => m_w,
+                                Err(message) => {
+                                    Graphic::putfont_asc(200, 200, 10, &message);
+                                    mouse_window
+                                }
+                            };
+                        },
+                        None => {},
+                    }
+                },
+                Err(message) => {
+                    asmfunc::io_sti();
+                    let mut printer = Printer::new(200, 215, 10);
+                    write!(printer, "{:?}", message).unwrap();
+                },
+            };
+        }
+    }
     0
 }
 
