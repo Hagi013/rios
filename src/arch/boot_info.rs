@@ -21,4 +21,8 @@ impl BootInfo {
             vram:   unsafe   { *((ADR_BOOTINFO + 0x08) as *mut   u32) },
         }
     }
+
+    pub fn set_addr_vram(&mut self, vir_addr: u32) {
+        unsafe { *((ADR_BOOTINFO + 0x08) as *mut   u32) = vir_addr };
+    }
 }
