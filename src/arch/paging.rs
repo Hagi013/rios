@@ -22,7 +22,7 @@ use super::graphic::Graphic;
 use super::super::Printer;
 use core::fmt::Write;
 
-use crate::asmfunc::{load_cr0, store_cr0, load_cr3, store_cr3, set_pg_flag};
+use crate::asmfunc::{load_cr0, store_cr0, load_cr3, store_cr3, set_pg_flag, flush_tlb};
 
 const PTE_PRESENT: u16 = 0x0001;   // P bit
 const PTE_RW: u16 = 0x0002;        // R bit
@@ -61,9 +61,6 @@ pub fn init_paging(table: PageTableImpl<&LockedHeap>)
             Some(ref table) => {
                 // Cr0のPGフラグをOnにする
                 set_pg_flag();
-                let cr3 = load_cr3();
-                let mut printer = Printer::new(100, 500, 0);
-                write!(printer, "{:x}", cr3).unwrap();
             },
             None => panic!("Error init_paging."),
         };
@@ -200,7 +197,6 @@ where
         let phys_address: usize = start_phys_address as usize;
         let vir_address: usize = start_vir_address as usize;
         let page_dir_tbl = asmfunc::load_cr3() as *mut Table<PageDirectory>;
-        let flags = PTE_PRESENT | PTE_RW | PTE_USER;
         let page_size = size_of::<usize>() * NUM_OF_ENTRY;
         // let mut count: usize = 0;
         // 1 page毎なので、4096毎
@@ -212,7 +208,6 @@ where
             let dir_entry: Entry = unsafe { (*page_dir_tbl).entries[dir_idx] };
 
             if dir_entry.present() {
-                Graphic::putfont_asc(210, 350, 0, "OOOOKKKKKKK");
                 let mut page_table = dir_entry.address() as *mut Table<PageTable>;
                 unsafe { (*page_table).set_address(tbl_idx, phys_address as u32 & 0xfffff000, true); }
             } else {
@@ -290,6 +285,7 @@ where
             let flags = PTE_PRESENT | PTE_RW | PTE_USER;
             table_entry.set(pyhs_address & 0xfffff000, flags);
         }
+        flush_tlb();
         Ok(())
     }
 }
@@ -297,13 +293,12 @@ where
 #[no_mangle]
 pub extern "C" fn page_fault_handler(esp: *const usize) {
     Graphic::putfont_asc(10, 345, 10, "Page Fault!!");
-    loop {}
     let vir_address = asmfunc::load_cr2();
     {
         if let Some(ref mut table) = *KERNEL_TABLE.lock() {
-                table.map(vir_address);
+            table.map(vir_address);
         } else {
-                panic!("There is no Kernel Table.");
+            panic!("There is no Kernel Table.");
         }
     }
 }
