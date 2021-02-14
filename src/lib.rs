@@ -89,13 +89,6 @@ fn init_heap() {
     unsafe { ALLOCATOR.init(heap_start, heap_size) };
 }
 
-fn init_table_allocator() {
-    // let heap_start: usize = 0x00400000;
-    let heap_start: usize = 0x00a00000;
-    let heap_size: usize = 1024 + 1024 * 1024 * 4; // 4KB + 4MB
-    unsafe { TABLE_ALLOCATOR.init(heap_start, heap_size); }
-}
-
 #[cfg(not(test))]
 #[start]
 #[no_mangle]
