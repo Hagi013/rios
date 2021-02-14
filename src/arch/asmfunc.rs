@@ -183,7 +183,7 @@ pub fn set_pg_flag() {
         //     pop eax
         //     jmp .a
         // .a:
-        //     ret
+        //     mov eax, eax
         // "
         // :
         // :
@@ -200,6 +200,22 @@ pub fn set_pg_flag() {
         :
         :
         : "intel");
+    }
+}
+
+pub fn flush_tlb() {
+    unsafe {
+        llvm_asm!("
+        push eax
+        mov eax, cr3
+        mov cr3, eax
+        pop eax
+        "
+        :
+        :
+        :
+        : "intel"
+        )
     }
 }
 
