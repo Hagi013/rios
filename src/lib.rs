@@ -106,7 +106,6 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     init_heap();
     unsafe { set_kernel_table_allocator(&ALLOCATOR) };
 
-    // loop {}
 
     Graphic::putfont_asc(210, 85, 0, "-1-1-1-1");
     Graphic::putfont_asc(210, 100, 0, "0000");
@@ -116,7 +115,6 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     Graphic::putfont_asc(210, 175, 0, "rio-os"); //
     keyboard::allow_pic1_keyboard_int();
     mouse::allow_mouse_init();
-
 
     let mouse: MouseGraphic = MouseGraphic::new();
     let mouse_state = mouse.init_mouse_cursor(14);
