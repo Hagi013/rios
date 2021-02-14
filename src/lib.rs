@@ -40,7 +40,7 @@ use arch::pic;
 use arch::keyboard;
 use arch::mouse;
 use arch::timer::{ timer_init, get_uptime };
-use arch::paging::{ PageTableImpl, init_paging, paging_on };
+use arch::paging::{PageTableImpl, init_paging, set_kernel_table_allocator};
 
 pub mod window;
 use window::{ Window, WindowsManager };
@@ -78,8 +78,10 @@ use core::borrow::Borrow;
 pub mod execption;
 
 fn init_heap() {
-    let heap_start: usize = 0x00e80000;
-    let heap_end: usize = 0x3fff0000;
+    // let heap_start: usize = 0x00e80000;
+    // let heap_end: usize = 0x3fff0000;
+    let heap_start: usize = 0x00800000; // 0x00e80000
+    let heap_end: usize = 0x3e970000; // 0x3fff0000;
 
     let heap_size: usize = heap_end - heap_start;
     let mut printer = Printer::new(0, 80, 10);
@@ -87,96 +89,91 @@ fn init_heap() {
     unsafe { ALLOCATOR.init(heap_start, heap_size) };
 }
 
-// fn init_table_allocator() {
-//     // let heap_start: usize = 0x00400000;
-//     let heap_start: usize = 0x00a00000;
-//     let heap_size: usize = 1024 * 1024 * 4; // 4MB
-//     Graphic::putfont_asc(0, 95, 10, "aaaaaaa");
-//     unsafe { TABLE_ALLOCATOR.init(heap_start, heap_size); }
-// }
+fn init_table_allocator() {
+    // let heap_start: usize = 0x00400000;
+    let heap_start: usize = 0x00a00000;
+    let heap_size: usize = 1024 + 1024 * 1024 * 4; // 4KB + 4MB
+    unsafe { TABLE_ALLOCATOR.init(heap_start, heap_size); }
+}
 
 #[cfg(not(test))]
 #[start]
 #[no_mangle]
 pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
-    // loop {}
-    Graphic::putfont_asc(210, 150, 5, "rio-os, rio-os , rio-os"); //
-    Graphic::init();
     pic::init_pic();
     let dsc_tbl: DscTbl = DscTbl::init_gdt_idt();
     asmfunc::io_sti();
 
-    // let mut page_tmpl_impl = unsafe { PageTableImpl::initialize() };
-    // if page_tmpl_impl.is_err() { panic!("page_tmpl_impl is error.") }
-    // let page_tmpl_impl: PageTableImpl<&LockedHeap> = unsafe { page_tmpl_impl.unwrap().set_allocator(&ALLOCATOR) };
-    // init_paging(page_tmpl_impl);
-    // paging_on();
-    loop {}
+    let mut page_tmpl_impl_result = unsafe { PageTableImpl::initialize() };
+    let mut page_tmpl_impl: PageTableImpl<&LockedHeap> =  if page_tmpl_impl_result.is_err() { panic!("page_tmpl_impl is error.") } else { page_tmpl_impl_result.unwrap() };
+    init_paging(page_tmpl_impl);
 
-    // init_heap();
-    // Graphic::putfont_asc(210, 85, 10, "-1-1-1-1");
-    // {
-    //     let page_tmpl_impl = unsafe { PageTableImpl::initialize(&*TABLE_ALLOCATOR, &ALLOCATOR) };
-    //     init_paging(page_tmpl_impl.unwrap());
-    // }
-    // Graphic::putfont_asc(210, 100, 10, "0000");
-    //
-    //
-    // Graphic::putfont_asc(210, 150, 10, "rio-os");
-    // let mut window_manager: WindowsManager = WindowsManager::new();
-    // timer_init();
-    // keyboard::allow_pic1_keyboard_int();
-    // mouse::allow_mouse_int();
-    //
-    // let mouse: MouseGraphic = MouseGraphic::new();
-    // let mouse_state = mouse.init_mouse_cursor(14);
-    //
-    // let mut mouse_window: *mut Window = window_manager.create_window(mouse_state.1, mouse_state.2, mouse_state.3, mouse_state.4, mouse_state.0).unwrap();
-    // let mut idx: u32 = 10;
-    //
-    // loop {
-    //     asmfunc::io_cli();
-    //     if !keyboard::is_existing() && !mouse::is_existing() {
-    //         asmfunc::io_stihlt();
-    //         continue;
-    //     }
-    //     if keyboard::is_existing() {
-    //         match keyboard::get_data() {
-    //             Ok(data) => {
-    //                 asmfunc::io_sti();
-    //                 Graphic::putfont_asc_from_keyboard(idx, 15, 10, data);
-    //             },
-    //             Err(_) => asmfunc::io_sti(),
-    //         };
-    //         idx += 8;
-    //     }
-    //     if mouse::is_existing() {
-    //         match mouse::get_data() {
-    //             Ok(data) => {
-    //                 asmfunc::io_sti();
-    //                 match data {
-    //                     Some(status) => {
-    //                         let x: i32 = status.1;
-    //                         let y: i32 = status.2;
-    //                         mouse_window = match window_manager.move_window(mouse_window, x, y) {
-    //                             Ok(m_w) => m_w,
-    //                             Err(message) => {
-    //                                 Graphic::putfont_asc(200, 200, 10, &message);
-    //                                 mouse_window
-    //                             }
-    //                         };
-    //                     },
-    //                     None => {},
-    //                 }
-    //             },
-    //             Err(message) => {
-    //                 asmfunc::io_sti();
-    //                 let mut printer = Printer::new(200, 215, 10);
-    //                 write!(printer, "{:?}", message).unwrap();
-    //             },
-    //         };
-    //     }
-    // }
+    Graphic::init();
+    Graphic::putfont_asc(210, 150, 0, "rio-os, rio-os , rio-os");
+    init_heap();
+    unsafe { set_kernel_table_allocator(&ALLOCATOR) };
+
+    // loop {}
+
+    Graphic::putfont_asc(210, 85, 0, "-1-1-1-1");
+    Graphic::putfont_asc(210, 100, 0, "0000");
+
+    let mut window_manager: WindowsManager = WindowsManager::new();
+    timer_init();
+    Graphic::putfont_asc(210, 175, 0, "rio-os"); //
+    keyboard::allow_pic1_keyboard_int();
+    mouse::allow_mouse_init();
+
+
+    let mouse: MouseGraphic = MouseGraphic::new();
+    let mouse_state = mouse.init_mouse_cursor(14);
+
+    let mut mouse_window: *mut Window = window_manager.create_window(mouse_state.1, mouse_state.2, mouse_state.3, mouse_state.4, mouse_state.0).unwrap();
+    let mut idx: u32 = 10;
+
+    loop {
+        asmfunc::io_cli();
+        if !keyboard::is_existing() && !mouse::is_existing() {
+            asmfunc::io_stihlt();
+            continue;
+        }
+        if keyboard::is_existing() {
+            match keyboard::get_data() {
+                Ok(data) => {
+                    asmfunc::io_sti();
+                    Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
+                },
+                Err(_) => asmfunc::io_sti(),
+            };
+            idx += 8;
+        }
+        if mouse::is_existing() {
+            match mouse::get_data() {
+                Ok(data) => {
+                    asmfunc::io_sti();
+                    match data {
+                        Some(status) => {
+                            let x: i32 = status.1;
+                            let y: i32 = status.2;
+                            mouse_window = match window_manager.move_window(mouse_window, x, y) {
+                                Ok(m_w) => m_w,
+                                Err(message) => {
+                                    Graphic::putfont_asc(200, 200, 10, &message);
+                                    mouse_window
+                                }
+                            };
+                        },
+                        None => {},
+                    }
+                },
+                Err(message) => {
+                    asmfunc::io_sti();
+                    let mut printer = Printer::new(200, 215, 10);
+                    write!(printer, "{:?}", message).unwrap();
+                },
+            };
+        }
+    }
     0
 }
 
@@ -188,15 +185,15 @@ pub extern "C" fn eh_personality() {}
 #[no_mangle]
 pub extern "C" fn panic(_info: &PanicInfo) -> ! {
     Graphic::putfont_asc(0, 100, 10, "panic!!!!!");
-    let mut printer = Printer::new(0, 120, 10);
+    let mut printer = Printer::new(0, 120, 0);
     write!(printer, "{:?}", _info.location().unwrap().file()).unwrap();
-    let mut printer = Printer::new(0, 140, 10);
+    let mut printer = Printer::new(0, 140, 0);
     write!(printer, "{:?}", _info.location().unwrap().line()).unwrap();
-    let mut printer = Printer::new(0, 160, 10);
+    let mut printer = Printer::new(0, 160, 0);
     write!(printer, "{:?}", _info.location().unwrap().column()).unwrap();
-    let mut printer = Printer::new(0, 180, 10);
+    let mut printer = Printer::new(0, 180, 0);
     write!(printer, "{:?}", _info.message().unwrap()).unwrap();
-    let mut printer = Printer::new(0, 300, 10);
+    let mut printer = Printer::new(0, 300, 0);
     write!(printer, "{:?}", _info.payload().downcast_ref::<&str>()).unwrap();
     loop {
         asmfunc::io_hlt();
@@ -210,7 +207,7 @@ pub extern "C" fn _Unwind_Resume(_ex_obj: *mut ()) { }
 #[alloc_error_handler]
 fn alloc_error_handler(layout: Layout) -> ! {
     Graphic::putfont_asc(0, 180, 10, "alloc_error_handler!!!!!");
-    let mut printer = Printer::new(0, 200, 10);
+    let mut printer = Printer::new(0, 200, 0);
     write!(printer, "{:?}", layout.size()).unwrap();
 
     loop {

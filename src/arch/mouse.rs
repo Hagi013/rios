@@ -62,7 +62,7 @@ impl MouseBuf {
         if self.phase == 2 { /* マウスの2バイト目を待っている段階 */
             self.buf[1] = data;
             self.phase = 3;
-            return Ok((0));
+            return Ok(0);
         }
         if self.phase == 3 { /* マウスの3バイト目を待っている段階 */
             self.buf[2] = data;
@@ -88,8 +88,8 @@ impl MouseBuf {
     }
 }
 
-pub fn allow_mouse_int() {
-    asmfunc::io_out8(PIC1_IMR, 0xef);
+pub fn allow_mouse_init() {
+    asmfunc::io_out8(PIC1_IMR, 0xef); /* マウスを許可(11101111) */
     wait_kbc_sendready();
     asmfunc::io_out8(PORT_KEYCMD, KEYCMD_SENDTO_MOUSE);
     wait_kbc_sendready();

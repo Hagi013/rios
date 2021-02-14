@@ -123,7 +123,9 @@ keystatus:
         and     eax, 0x7fffffff     ; bit31を0にする(ページング禁止のため)
         or      eax, 0x00000001     ; bit0を1にする(プロテクトモード移行のため)
         mov     cr0, eax
-        jmp     pipelineflush
+        jmp     2*8:pipelineflush
+
+        [BITS 32]
 pipelineflush:
         mov     ax, 1*8             ; 読み書き可能セグメント32bit
         mov     ds, ax
@@ -176,8 +178,8 @@ pipelineflush:
 ;        call    memcpy
 ;skip:
         mov     esp, STACK           ; スタック初期値
-;        jmp     $                    ; debug
-        jmp     DWORD 2*8:0          ; .sysへジャンプ
+        ; jmp     $                    ; debug
+        jmp     0x00280000     ; .sysへジャンプ
 
 waitkbdout:
         in      al, 0x64
@@ -200,7 +202,7 @@ GDT0:
         ; resb    8                   ; フルセレクタ
         times   8 db 0
         dw      0xffff, 0x0000, 0x9200, 0x00cf  ; 読み書き可能セグメント32bit
-        dw      0xffff, 0x0000, 0x9a28, 0x0047  ; 実行可能セグメント32bit(initos用)
+        dw      0xffff, 0x0000, 0x9a00, 0x0047  ; 実行可能セグメント32bit(initos用)
 
         dw      0
 GDTR0:
