@@ -29,7 +29,8 @@ extern "C" {
 const ADR_GDT: u32 = 0x00270000;
 const LIMIT_GDT: usize = 0x0000ffff;
 const ADR_OSPAK: u32 = 0x00000000;
-const LIMIT_OSPAK: u32 = 0x00280000 + 0x0007ffff;
+// const LIMIT_OSPAK: u32 = 0x00280000 + 0x0007ffff;
+const LIMIT_OSPAK: u32 = 0xffffffff;
 const AR_DATA32_RW: u32 = 0x4092;
 const AR_CODE32_ER: u32 = 0x409a;
 
