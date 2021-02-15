@@ -1,3 +1,4 @@
+// [ref](https://github.com/rust-lang-nursery/lazy-static.rs)
 #[path="core_lazy.rs"]
 pub mod lazy;
 
