@@ -39,7 +39,22 @@ $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/%.o: $(KERNEL_DIR)/boot
 	nasm -f elf32 $(KERNEL_DIR)/boot/asmfunc.asm -o $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.o -l $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.lst
 
 qemu:
-	qemu-system-$(QEMU_ARCH_i686) -m 4096 -rtc base=localtime -vga std -fda $(BUILD_DIR)/$(BUILD_NAME).img -monitor stdio $(DEBUG)
+#	sudo qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+#		-rtc base=localtime \
+#		-vga std \
+#		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
+#		-monitor stdio \
+#		-net nic -netdev tap,id=net0,ifname=tap0,script=/Users/hagi/Personal/rios/tuntap-up,downscript=./tuntap-down \
+#		-device e1000,netdev=net0 \
+#		$(DEBUG)
+	sudo qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+		-rtc base=localtime \
+		-vga std \
+		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
+		-monitor stdio \
+		-net nic -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
+		-device e1000,netdev=net0 \
+		$(DEBUG)
 
 clean:
 	rm -rf $(BUILD_DIR)/*
