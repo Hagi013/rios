@@ -23,8 +23,13 @@ pub fn io_sti() {
 }
 
 pub fn io_stihlt() {
-    io_sti();
-    io_hlt();
+    unsafe {
+        llvm_asm!("
+        sti
+        hlt
+        " :::: "intel");
+    }
+
 }
 
 pub fn io_in8(port: i32) -> i32 {
