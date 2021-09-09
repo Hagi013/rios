@@ -1,0 +1,14 @@
+#!/bin/bash
+
+TAPDEV="tap0"
+BRIDGEDEV="br0"
+ETHDEV="enp0s3"
+
+brctl delif ${BRIDGEDEV} ${TAPDEV}
+tunctl -d ${TAPDEV}
+ip link delete ${TAPDEV}
+brctl delif ${BRIDGEDEV} ${ETHDEV}
+ifconfig ${BRIDGEDEV} down
+brctl delbr ${BRIDGEDEV}
+#ifconfig ${ETHDEV} up
+#dhclient -v ${ETHDEV}

@@ -1,0 +1,18 @@
+#!/bin/bash
+
+TAPDEV="tap0"
+BRIDGEDEV="br0"
+ETHDEV="enp0s3"
+
+# [ref](https://gist.github.com/extremecoders-re/e8fd8a67a515fee0c873dcafc81d811c)
+brctl addbr ${BRIDGEDEV}
+ip addr flush dev ${ETHDEV}
+brctl addif ${BRIDGEDEV} ${ETHDEV}
+tunctl -t ${TAPDEV} -u `whoami`
+brctl addif ${BRIDGEDEV} ${TAPDEV}
+ip link set ${TAPDEV} promisc on
+ifconfig ${ETHDEV} up
+ifconfig ${TAPDEV} up
+ifconfig ${BRIDGEDEV} up
+brctl show
+dhclient -v ${BRIDGEDEV}

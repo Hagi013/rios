@@ -1,0 +1,41 @@
+#!/bin/bash
+
+TAPDEV="tap0"
+BRIDGEDEV="bridge1"
+
+# PFのログを取得するため
+ifconfig pflog0 create
+
+ifconfig ${BRIDGEDEV} create
+#ifconfig ${BRIDGEDEV} 0.0.0.0 up
+ifconfig ${BRIDGEDEV} 192.168.3.1 up
+# ifconfig ${BRIDGEDEV} addm en0
+ifconfig ${BRIDGEDEV} addm ${TAPDEV}
+ifconfig ${TAPDEV} up 192.168.3.2
+#ifconfig ${TAPDEV} up 0.0.0.0 promisc
+ifconfig ${BRIDGEDEV} up
+
+sysctl -w net.link.ether.inet.proxyall=1
+sysctl -w net.inet.ip.forwarding=1
+# sysctl -w net.inet.ip.fw.enable=1
+
+# To set up NAT, run these commands every time qemu is started (because only then the tap0 interface is created):
+#echo "
+#nat on en0 from tap0:network to any -> (en0)
+#pass out on en0 inet from tap0:network to any
+#" | sudo pfctl -ef -
+
+#echo "
+#pass quick on tap0 all
+#pass quick on en0 all
+#pass quick on bridge1 all
+#" | sudo pfctl -ef -
+
+echo "
+pass all
+nat on en0 from tap0 to any -> (en0)
+" | sudo pfctl -ef -
+
+
+# To confirm the NAT setup:
+sudo pfctl -s nat

@@ -1,0 +1,20 @@
+#!/bin/bash
+
+TAPDEV="tap0"
+BRIDGEDEV="bridge1"
+
+# To clear the NAT and revert to the original pf.conf:
+sudo pfctl -F all -f /etc/pf.conf
+
+sysctl -w net.link.ether.inet.proxyall=0
+sysctl -w net.inet.ip.forwarding=0
+# sysctl -w net.inet.ip.fw.enable=0
+
+ifconfig ${BRIDGEDEV} down
+ifconfig ${TAPDEV} down
+ifconfig ${BRIDGEDEV} deletem ${TAPDEV}
+# ifconfig ${BRIDGEDEV} deletem en0
+ifconfig ${BRIDGEDEV} 0.0.0.0 down
+ifconfig ${BRIDGEDEV} destroy
+
+ifconfig pflog0 destroy
