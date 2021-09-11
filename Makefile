@@ -11,29 +11,9 @@ BUILD_MODE=debug
 DEBUG := -S -gdb tcp::9001
 DEBUG_MODE := -D ./qemu.log
 
-#QEMUNET = -netdev user,id=n1,hostfwd=udp::10007-:7,hostfwd=tcp::10007-:7 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
-#          -netdev tap,id=n2,ifname=tap0,script=tuntap-up,downscript=./tuntap-down -device e1000,netdev=n2 -object filter-dump,id=f2,netdev=n2,file=n2.pcap
-
-#QEMUNET = -net nic,model=e1000,id=n1 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
-#		-netdev tap,id=n2,ifname=tap0,script=tuntap-up,downscript=./tuntap-down -device e1000,netdev=n2 -object filter-dump,id=f2,netdev=n2,file=n2.pcap
-
-#QEMUNET = -netdev user,id=n1 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
-#		  -netdev type=tap,id=net0,script=no,downscript=no -device e1000e,netdev=net0 -object filter-dump,id=f2,netdev=net0,file=n2.pcap
-#QEMUNET = -netdev user,id=n1 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
-#		  -netdev type=tap,id=net0,script=tuntap-up,downscript=./tuntap-down -device e1000e,netdev=net0 -object filter-dump,id=f2,netdev=net0,file=n2.pcap
 QEMUNET = -netdev type=tap,id=net0,ifname=tap0,script=./tuntap-up,downscript=./tuntap-down \
 		  -device e1000,netdev=net0 \
 		  -object filter-dump,id=f1,netdev=net0,file=dump.dat
-
-
-#QEMUNET = -netdev type=tap,id=net0,script=tuntap-up,downscript=./tuntap-down -device e1000e,netdev=net0 -object filter-dump,id=f1,netdev=net0,file=n2.pcap
-# // QEMUNET = -netdev type=tap,id=net0,ifname=tap0,script=tuntap-up,downscript=./tuntap-down -device e1000e,netdev=net0,mac=52:54:00:01:01:00 -object filter-dump,id=f1,netdev=net0,file=n2.pcap
-
-#QEMUNET = -netdev vmnet-macos,id=vmnet,mode=bridged -device rtl8139,netdev=vmnet -object filter-dump,netdev=vmnet,id=dump,file=dump.dat
-
-#QEMUNET = -net nic,model=rtl8139 -netdev tap,id=net0,ifname=tap0,script=tuntap-up,downscript=./tuntap-down \
-#		-device e1000,netdev=net0 \
-#		-object filter-dump,id=f1,netdev=net0,file=dump.dat
 
 
 asm:	$(BUILD_DIR)/ipl.bin \
