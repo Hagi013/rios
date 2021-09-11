@@ -131,8 +131,8 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     // pci::test_nic_set();
     // pci::set_pci_intr_disable();
     pci::set_bus_master_en();
-    pci::nic_init();
-    pci::tx_init();
+    pci::nic_init(); 
+    // pci::tx_init();
     // pci::dump_nic_ims();
 
     let mut idx: u32 = 10;
@@ -151,7 +151,7 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                     Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
                     let mut send_data: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
                     send_data.push(data as u8);
-                    // pci::send_frame(send_data);
+                    pci::send_frame(send_data);
                 },
                 Err(_) => asmfunc::io_sti(),
             };
@@ -163,6 +163,7 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
             let mut frame_idx: usize = 0;
             frame.iter().for_each(|b| {
                 let mut printer = Printer::new(frame_idx as u32, 45, 0);
+                frame_idx += 8;
                 write!(printer, "{:?}", b).unwrap();
             });
             frame_idx = 0;
