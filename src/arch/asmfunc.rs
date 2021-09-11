@@ -23,8 +23,13 @@ pub fn io_sti() {
 }
 
 pub fn io_stihlt() {
-    io_sti();
-    io_hlt();
+    unsafe {
+        llvm_asm!("
+        sti
+        hlt
+        " :::: "intel");
+    }
+
 }
 
 pub fn io_in8(port: i32) -> i32 {
@@ -42,6 +47,21 @@ pub fn io_in8(port: i32) -> i32 {
     return res;
 }
 
+pub fn io_in32(port: i32) -> i32 {
+    let mut res: i32 = 0;
+    unsafe {
+        llvm_asm!("
+        mov eax, 0
+        in eax, dx
+        "
+        : "={eax}"(res)
+        : "{edx}"(port)
+        : "memory"
+        : "intel");
+    }
+    res
+}
+
 //pub fn io_out8(port: i32, data: i32) {
 pub fn io_out8(port: i32, data: u8) {
     unsafe {
@@ -50,6 +70,18 @@ pub fn io_out8(port: i32, data: u8) {
         "
         : // output
         : "{edx}"(port), "{al}"(data) // input
+        :
+        : "intel");
+    }
+}
+
+pub fn io_out32(port: i32, data: u32) {
+    unsafe {
+        llvm_asm!("
+        out dx, eax
+        "
+        :
+        : "{edx}"(port), "{eax}"(data)
         :
         : "intel");
     }
@@ -313,6 +345,24 @@ pub fn farjmp(eip: u32, _cs: u32) {
     unsafe {
         llvm_asm!("
         jmp far [esp+4]
+        "
+        :
+        :
+        :
+        : "intel");
+    }
+}
+
+pub fn jmp_stop() {
+    unsafe {
+        llvm_asm!("
+        .b:
+        jmp .b
+        jmp .b
+        jmp .b
+        jmp .b
+        jmp .b
+        jmp .b
         "
         :
         :

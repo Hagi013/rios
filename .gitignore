@@ -12,3 +12,8 @@ Cargo.lock
 .idea/
 .DS_Store
 dist/
+
+*.dat
+*.log
+*.txt
+*.obj

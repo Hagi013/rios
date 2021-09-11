@@ -330,3 +330,8 @@ impl fmt::Write for Printer {
         Ok(())
     }
 }
+
+pub fn print_str(width: u32, height: u32, s: &str, color: u8) {
+    let mut p = Printer::new(width, height, color);
+    write!(p, "{:?}", s).unwrap();
+}

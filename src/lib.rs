@@ -36,11 +36,11 @@ use arch::graphic::MouseGraphic;
 use arch::graphic::Printer;
 use arch::asmfunc;
 use arch::dsctbl::DscTbl;
-use arch::pic;
 use arch::keyboard;
 use arch::mouse;
 use arch::timer::{ timer_init, get_uptime };
 use arch::paging::{PageTableImpl, init_paging, set_kernel_table_allocator};
+use arch::pic;
 
 pub mod window;
 use window::{ Window, WindowsManager };
@@ -75,7 +75,11 @@ use util::lazy_static::*;
 use alloc::collections::vec_deque::VecDeque;
 use core::borrow::Borrow;
 
-pub mod execption;
+pub mod exception;
+
+pub mod drivers;
+use drivers::bus::pci;
+use drivers::net::e1000;
 
 fn init_heap() {
     // let heap_start: usize = 0x00e80000;
@@ -84,7 +88,7 @@ fn init_heap() {
     let heap_end: usize = 0x3e970000; // 0x3fff0000;
 
     let heap_size: usize = heap_end - heap_start;
-    let mut printer = Printer::new(0, 80, 10);
+    let mut printer = Printer::new(0, 80, 0);
     write!(printer, "{:x}", heap_size).unwrap();
     unsafe { ALLOCATOR.init(heap_start, heap_size) };
 }
@@ -112,7 +116,7 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
 
     let mut window_manager: WindowsManager = WindowsManager::new();
     timer_init();
-    Graphic::putfont_asc(210, 175, 0, "rio-os"); //
+    Graphic::putfont_asc(210, 175, 0, "rio-os");
     keyboard::allow_pic1_keyboard_int();
     mouse::allow_mouse_init();
 
@@ -120,10 +124,22 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     let mouse_state = mouse.init_mouse_cursor(14);
 
     let mut mouse_window: *mut Window = window_manager.create_window(mouse_state.1, mouse_state.2, mouse_state.3, mouse_state.4, mouse_state.0).unwrap();
+
+    pci::dump_vid_did();
+    // pci::dump_command_status();
+    pci::dump_bar(); //
+    // pci::test_nic_set();
+    // pci::set_pci_intr_disable();
+    pci::set_bus_master_en();
+    pci::nic_init(); 
+    // pci::tx_init();
+    // pci::dump_nic_ims();
+
     let mut idx: u32 = 10;
 
     loop {
         asmfunc::io_cli();
+        let frame = pci::receive_frame();
         if !keyboard::is_existing() && !mouse::is_existing() {
             asmfunc::io_stihlt();
             continue;
@@ -133,10 +149,24 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                 Ok(data) => {
                     asmfunc::io_sti();
                     Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
+                    let mut send_data: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
+                    send_data.push(data as u8);
+                    pci::send_frame(send_data);
                 },
                 Err(_) => asmfunc::io_sti(),
             };
             idx += 8;
+        }
+        let mut printer = Printer::new(10, 30, 0);
+        write!(printer, "{:?}", frame.len()).unwrap();
+        if frame.len() > 0 {
+            let mut frame_idx: usize = 0;
+            frame.iter().for_each(|b| {
+                let mut printer = Printer::new(frame_idx as u32, 45, 0);
+                frame_idx += 8;
+                write!(printer, "{:?}", b).unwrap();
+            });
+            frame_idx = 0;
         }
         if mouse::is_existing() {
             match mouse::get_data() {
@@ -159,7 +189,7 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                 },
                 Err(message) => {
                     asmfunc::io_sti();
-                    let mut printer = Printer::new(200, 215, 10);
+                    let mut printer = Printer::new(200, 215, 0);
                     write!(printer, "{:?}", message).unwrap();
                 },
             };
@@ -197,8 +227,8 @@ pub extern "C" fn _Unwind_Resume(_ex_obj: *mut ()) { }
 
 #[alloc_error_handler]
 fn alloc_error_handler(layout: Layout) -> ! {
-    Graphic::putfont_asc(0, 180, 10, "alloc_error_handler!!!!!");
-    let mut printer = Printer::new(0, 200, 0);
+    Graphic::putfont_asc(0, 400, 0, "alloc_error_handler!!!!!");
+    let mut printer = Printer::new(0, 500, 0);
     write!(printer, "{:?}", layout.size()).unwrap();
 
     loop {

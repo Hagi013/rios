@@ -9,6 +9,12 @@ BUILD_MODE=debug
 #BUILD_MODE=release
 
 DEBUG := -S -gdb tcp::9001
+DEBUG_MODE := -D ./qemu.log
+
+QEMUNET = -netdev type=tap,id=net0,ifname=tap0,script=./tuntap-up,downscript=./tuntap-down \
+		  -device e1000,netdev=net0 \
+		  -object filter-dump,id=f1,netdev=net0,file=dump.dat
+
 
 asm:	$(BUILD_DIR)/ipl.bin \
  	$(BUILD_DIR)/secondboot.bin
@@ -39,7 +45,44 @@ $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/%.o: $(KERNEL_DIR)/boot
 	nasm -f elf32 $(KERNEL_DIR)/boot/asmfunc.asm -o $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.o -l $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.lst
 
 qemu:
-	qemu-system-$(QEMU_ARCH_i686) -m 4096 -rtc base=localtime -vga std -fda $(BUILD_DIR)/$(BUILD_NAME).img -monitor stdio $(DEBUG)
+#	sudo qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+#		-rtc base=localtime \
+#		-vga std \
+#		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
+#		-monitor stdio \
+#		-net nic -netdev tap,id=net0,ifname=tap0,script=/Users/hagi/Personal/rios/tuntap-up,downscript=./tuntap-down \
+# 		-net nic,model=rtl8139,macaddr=ae:de:48:00:33:01 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no -usb  \
+#		-device e1000,netdev=net0 \
+#		$(DEBUG)
+#	sudo qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+# 	sudo /Users/hagi/Personal/qemu-v5.1.0/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+#	sudo /opt/local/bin/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+
+	sudo /Users/hagi/Personal/qemu/build/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+		-rtc base=localtime \
+		-vga std \
+		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
+		-monitor stdio \
+		$(QEMUNET) \
+		$(DEBUG) \
+		$(DEBUG_MODE)
+		# -boot n \
+		# -device vmxnet3,netdev=net0 \
+
+UBUNTU_QEMUNET = -netdev type=tap,id=net0,ifname=tap0,script=./tuntap-ubuntu-up,downscript=./tuntap-ubuntu-down \
+		  -device e1000,netdev=net0 \
+		  -object filter-dump,id=f1,netdev=net0,file=dump.dat
+ubuntu:
+	sudo touch dump.dat && sudo chmod 777 dump.dat && \
+	sudo /home/haaagiii/qemu/build/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+		-rtc base=localtime \
+		-vga std \
+		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
+		-monitor stdio \
+		$(UBUNTU_QEMUNET) \
+		$(DEBUG) \
+		$(DEBUG_MODE)
+
 
 clean:
 	rm -rf $(BUILD_DIR)/*

@@ -174,6 +174,9 @@ where
         Self::map_entry(boot_info.vram, 0x00400000, 0x00400000, KERNEL_BASE_ADDR);
         boot_info.set_addr_vram(0x00400000);
 
+        // 0xfe000000 - 0xfeffffff(PCI) ⇒ direct mapping 0xfe000000(dir index: 1016) - 0xfeffffff(dir index: 1019)
+        Self::map_entry(0xfe000000, 0xfe000000, 0x01000000, KERNEL_BASE_ADDR);
+
         // 0x00e80000 - 0x40a80000(Heap) ⇒ 0x00800000(dir index: 2) - 0x3fffffff(dir index: 255)
         Self::map_entry(0x00e80000, 0x00800000, 0x3f800000, KERNEL_BASE_ADDR);
 
