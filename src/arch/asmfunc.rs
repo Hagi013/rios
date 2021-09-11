@@ -353,6 +353,24 @@ pub fn farjmp(eip: u32, _cs: u32) {
     }
 }
 
+pub fn jmp_stop() {
+    unsafe {
+        llvm_asm!("
+        .b:
+        jmp .b
+        jmp .b
+        jmp .b
+        jmp .b
+        jmp .b
+        jmp .b
+        "
+        :
+        :
+        :
+        : "intel");
+    }
+}
+
 //pub fn set_asm_inthandler(handler: *const u32) -> *const u32 {
 //    let f = || asm_inthandler(handler);
 //    return f as *const u32
