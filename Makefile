@@ -9,6 +9,32 @@ BUILD_MODE=debug
 #BUILD_MODE=release
 
 DEBUG := -S -gdb tcp::9001
+DEBUG_MODE := -D ./qemu.log
+
+#QEMUNET = -netdev user,id=n1,hostfwd=udp::10007-:7,hostfwd=tcp::10007-:7 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
+#          -netdev tap,id=n2,ifname=tap0,script=tuntap-up,downscript=./tuntap-down -device e1000,netdev=n2 -object filter-dump,id=f2,netdev=n2,file=n2.pcap
+
+#QEMUNET = -net nic,model=e1000,id=n1 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
+#		-netdev tap,id=n2,ifname=tap0,script=tuntap-up,downscript=./tuntap-down -device e1000,netdev=n2 -object filter-dump,id=f2,netdev=n2,file=n2.pcap
+
+#QEMUNET = -netdev user,id=n1 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
+#		  -netdev type=tap,id=net0,script=no,downscript=no -device e1000e,netdev=net0 -object filter-dump,id=f2,netdev=net0,file=n2.pcap
+#QEMUNET = -netdev user,id=n1 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
+#		  -netdev type=tap,id=net0,script=tuntap-up,downscript=./tuntap-down -device e1000e,netdev=net0 -object filter-dump,id=f2,netdev=net0,file=n2.pcap
+QEMUNET = -netdev type=tap,id=net0,ifname=tap0,script=./tuntap-up,downscript=./tuntap-down \
+		  -device e1000,netdev=net0 \
+		  -object filter-dump,id=f1,netdev=net0,file=dump.dat
+
+
+#QEMUNET = -netdev type=tap,id=net0,script=tuntap-up,downscript=./tuntap-down -device e1000e,netdev=net0 -object filter-dump,id=f1,netdev=net0,file=n2.pcap
+# // QEMUNET = -netdev type=tap,id=net0,ifname=tap0,script=tuntap-up,downscript=./tuntap-down -device e1000e,netdev=net0,mac=52:54:00:01:01:00 -object filter-dump,id=f1,netdev=net0,file=n2.pcap
+
+#QEMUNET = -netdev vmnet-macos,id=vmnet,mode=bridged -device rtl8139,netdev=vmnet -object filter-dump,netdev=vmnet,id=dump,file=dump.dat
+
+#QEMUNET = -net nic,model=rtl8139 -netdev tap,id=net0,ifname=tap0,script=tuntap-up,downscript=./tuntap-down \
+#		-device e1000,netdev=net0 \
+#		-object filter-dump,id=f1,netdev=net0,file=dump.dat
+
 
 asm:	$(BUILD_DIR)/ipl.bin \
  	$(BUILD_DIR)/secondboot.bin
@@ -45,16 +71,38 @@ qemu:
 #		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
 #		-monitor stdio \
 #		-net nic -netdev tap,id=net0,ifname=tap0,script=/Users/hagi/Personal/rios/tuntap-up,downscript=./tuntap-down \
+# 		-net nic,model=rtl8139,macaddr=ae:de:48:00:33:01 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no -usb  \
 #		-device e1000,netdev=net0 \
 #		$(DEBUG)
-	sudo qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+#	sudo qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+# 	sudo /Users/hagi/Personal/qemu-v5.1.0/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+#	sudo /opt/local/bin/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+
+	sudo /Users/hagi/Personal/qemu/build/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
 		-rtc base=localtime \
 		-vga std \
 		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
 		-monitor stdio \
-		-net nic -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
-		-device e1000,netdev=net0 \
-		$(DEBUG)
+		$(QEMUNET) \
+		$(DEBUG) \
+		$(DEBUG_MODE)
+		# -boot n \
+		# -device vmxnet3,netdev=net0 \
+
+UBUNTU_QEMUNET = -netdev type=tap,id=net0,ifname=tap0,script=./tuntap-ubuntu-up,downscript=./tuntap-ubuntu-down \
+		  -device e1000,netdev=net0 \
+		  -object filter-dump,id=f1,netdev=net0,file=dump.dat
+ubuntu:
+	sudo touch dump.dat && sudo chmod 777 dump.dat && \
+	sudo /home/haaagiii/qemu/build/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+		-rtc base=localtime \
+		-vga std \
+		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
+		-monitor stdio \
+		$(UBUNTU_QEMUNET) \
+		$(DEBUG) \
+		$(DEBUG_MODE)
+
 
 clean:
 	rm -rf $(BUILD_DIR)/*
