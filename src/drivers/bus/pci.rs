@@ -1,8 +1,9 @@
-use crate::asmfunc::{io_in32, io_out32, jmp_stop};
+use crate::asmfunc::{io_in32, io_out32};
 
 use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
 use core::mem::{size_of, transmute};
+use core::ptr::{read_volatile, write_volatile};
 use alloc::vec::Vec;
 
 use super::super::net::e1000::{get_mac_addr};
@@ -625,15 +626,17 @@ pub fn receive_frame() -> Vec<u8> {
 
     let mut current_rxdesc: RxDesc = unsafe { RX_DESC_DATA[*CURRENT_RX_IDX.lock()] };
 
-    let mut printer = Printer::new(100, 130, 0);
-    write!(printer, "{:?}", current_rxdesc.status & NIC_RDESC_STAT_DD == NIC_RDESC_STAT_DD).unwrap();
-
-    let mut printer = Printer::new(100, 145, 0);
-    write!(printer, "{:?}", current_rxdesc.status).unwrap();
-
-    let mut printer = Printer::new(100, 175, 0);
-    write!(printer, "{:?}", current_rxdesc.errors).unwrap();
-
+    // let mut printer = Printer::new(100, 130, 0);
+    // write!(printer, "{:?}", current_rxdesc.status & NIC_RDESC_STAT_DD == NIC_RDESC_STAT_DD).unwrap();
+    //
+    // let mut printer = Printer::new(100, 145, 0);
+    // write!(printer, "{:?}", current_rxdesc.status).unwrap();
+    //
+    // let mut printer = Printer::new(100, 175, 0);
+    // write!(printer, "{:?}", current_rxdesc.errors).unwrap();
+    //
+    // let mut printer = Printer::new(100, 190, 0);
+    // write!(printer, "{:?}", current_rxdesc.recv_buf_addr.desc_base_low).unwrap();
 
     dump_nic_reg_for_net();
 
@@ -642,7 +645,8 @@ pub fn receive_frame() -> Vec<u8> {
             let byte = unsafe { *(current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize) };
             buf.push(byte);
         }
-        current_rxdesc.status = 0;
+        // current_rxdesc.status = 0;
+        unsafe { write_volatile(&mut RX_DESC_DATA[*CURRENT_RX_IDX.lock()].status as *mut u8, 0) };
         set_nic_reg(NIC_REG_RDT, unsafe { *CURRENT_RX_IDX.lock() as u32 });
         unsafe {
             let idx = {
@@ -655,9 +659,12 @@ pub fn receive_frame() -> Vec<u8> {
 }
 
 pub fn tx_init() {
+    let mut tx_desc_data_for_initialization: [TxDesc; TXDESC_NUM] = [TxDesc::new(); TXDESC_NUM];
+    unsafe { TX_DESC_DATA = tx_desc_data_for_initialization; }
+
     /* txdescの先頭アドレスとサイズをNICレジスタへ設定 */
-    set_nic_reg(NIC_REG_TDBAH, unsafe { transmute::<*mut u32, u32>(&mut TX_DESC_DATA[0].tx_buf_address.high() as *mut u32) });
-    set_nic_reg(NIC_REG_TDBAL, unsafe { transmute::<*mut u32, u32>(&mut TX_DESC_DATA[0].tx_buf_address.low() as *mut u32) });
+    set_nic_reg(NIC_REG_TDBAH, 0x00);
+    set_nic_reg(NIC_REG_TDBAL, unsafe { &mut TX_DESC_DATA as *mut [TxDesc; TXDESC_NUM] as u32 });
     set_nic_reg(NIC_REG_TDLEN, tx_desc_data_size() as u32);
 
     set_nic_reg(NIC_REG_TDH, unsafe { *CURRENT_TX_IDX.lock() as u32 });
@@ -665,29 +672,47 @@ pub fn tx_init() {
 
     set_nic_reg(NIC_REG_TCTL, (0x40 << NIC_TCTL_COLD_SHIFT) | (0x0f << NIC_TCTL_CT_SHIFT) | NIC_TCTL_PSP | NIC_TCTL_EN);
 
-    let mut printer = Printer::new(700, 145, 0);
-    write!(printer, "{:?}", unsafe { TX_DESC_DATA[0].tx_buf_address.high() }).unwrap();
+    let mut printer = Printer::new(700, 400, 0);
+    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA as *mut [TxDesc; 80] as u32 }).unwrap();
+    let mut printer = Printer::new(700, 415, 0);
+    write!(printer, "{:?}", unsafe { &mut TX_DESC_DATA[0] as *mut TxDesc }).unwrap();
+    let mut printer = Printer::new(700, 430, 0);
+    write!(printer, "{:x}", unsafe { TX_DESC_DATA[0].tx_buf_address.low() }).unwrap();
+    let mut printer = Printer::new(700, 445, 0);
+    write!(printer, "{:x}", unsafe { TX_DESC_DATA[0].tx_buf_address.high() }).unwrap();
+    let mut printer = Printer::new(700, 460, 0);
+    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA[0].tx_buf_address as *mut BufferAddr as u32 }).unwrap();
+    let mut printer = Printer::new(700, 475, 0);
+    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA[1].tx_buf_address as *mut BufferAddr as u32 }).unwrap();
 
 }
 
 
 pub fn send_frame(mut buf: Vec<u8>) -> u8 {
-    let mut current_txdesc: TxDesc = unsafe { TX_DESC_DATA[*CURRENT_TX_IDX.lock()] };
-    current_txdesc.tx_buf_address.desc_base_low = unsafe { transmute::<*mut Vec<u8>, u32>(&mut buf as *mut Vec<u8>) };
-    current_txdesc.length = buf.len() as u16;
-    current_txdesc.sta = 0;
-
     unsafe {
-        let current_idx = { (*CURRENT_TX_IDX.lock()).clone() };
-        *CURRENT_TX_IDX.lock() = (current_idx + 1) % TXDESC_NUM;
-    }
+        let current_idx = unsafe { *CURRENT_TX_IDX.lock() };
+        TX_DESC_DATA[current_idx].tx_buf_address.desc_base_low = transmute::<*mut Vec<u8>, u32>(&mut buf as *mut Vec<u8>);
+        TX_DESC_DATA[current_idx].length = buf.len() as u16;
+        TX_DESC_DATA[current_idx].sta = 0;
 
-    set_nic_reg(NIC_REG_TDT, unsafe { *CURRENT_TX_IDX.lock() as u32 });
-    let mut send_status: u8 = 0;
-    while send_status == 0 {
-        send_status = current_txdesc.clone().sta & 0x0f;
-    }
-    return send_status;
+        let mut printer = Printer::new(700, 500, 0);
+        write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA[current_idx] as *mut TxDesc as u32 }).unwrap();
+        let mut printer = Printer::new(700, 515, 0);
+        write!(printer, "{:x}", unsafe { TX_DESC_DATA[current_idx].tx_buf_address.low() }).unwrap();
+        // let mut printer = Printer::new(700, 530, 0);
+        // write!(printer, "{:x}", TX_DESC_DATA[current_idx].length).unwrap();
+        let mut printer = Printer::new(700, 545, 0);
+        write!(printer, "{:x}", current_idx).unwrap();
+
+
+        let idx = { (*CURRENT_TX_IDX.lock()).clone() };
+        *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
+
+        set_nic_reg(NIC_REG_TDT, unsafe { *CURRENT_TX_IDX.lock() as u32 });
+        let mut send_status: u8 = 0;
+        while send_status == 0 { send_status = TX_DESC_DATA[current_idx].sta & 0x0f; }
+        return send_status;
+    };
 }
 
 static mut PRINT_IDX: usize = 0;
@@ -706,4 +731,5 @@ pub fn nic_init() {
     disable_nic_interrupt();
     rx_init();
     get_mac_addr();
+    tx_init();
 }
