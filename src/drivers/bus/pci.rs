@@ -706,35 +706,19 @@ pub fn tx_init() {
 pub fn send_frame(mut buf: Vec<u8>) -> u8 {
     unsafe {
         let current_idx = unsafe { *CURRENT_TX_IDX.lock() };
-        TX_DESC_DATA[current_idx] = TxDesc::new();
-        // TX_DESC_DATA[current_idx].length = buf.len() as u16;
-
         let mut slice: &[u8] = &[&buf[..]].concat();
         let mut dma_buf: DmaBox<[u8]> = DmaBox::from(slice);
-
-        TX_DESC_DATA[current_idx].length = buf.len() as u16;
-        TX_DESC_DATA[current_idx].tx_buf_address.desc_base_low = dma_buf.as_ptr() as u32;
-        TX_DESC_DATA[current_idx].sta_rsv = 0x00;
-
-        let mut printer = Printer::new(500, 720, 0);
-        write!(printer, "{:x}", buf.len() as u32).unwrap();
-
-        // let mut printer = Printer::new(400, 735, 0);
-        // write!(printer, "{:x}", read_mem!(&TX_DESC_DATA[current_idx]).length).unwrap();
 
         let idx = { (*CURRENT_TX_IDX.lock()).clone() };
         *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
 
-        let mut printer = Printer::new(500, 735, 0);
-        write!(printer, "{:x}", read_mem!(&TX_DESC_DATA[current_idx]).length).unwrap();
-
+        TX_DESC_DATA[current_idx].tx_buf_address.desc_base_low = dma_buf.as_ptr() as u32;
+        TX_DESC_DATA[current_idx].length = buf.len() as u16;
+        TX_DESC_DATA[current_idx].sta_rsv = 0x00;
         set_nic_reg(NIC_REG_TDT, unsafe { *CURRENT_TX_IDX.lock() as u32 });
-        let mut printer = Printer::new(500, 750, 0);
-        write!(printer, "{:x}", read_mem!(&TX_DESC_DATA[current_idx]).length).unwrap();
 
         let mut send_status: u8 = 0;
         while send_status == 0 { send_status = read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv & 0x0f; }
-        // send_status = read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv & 0x0f;
         let mut printer = Printer::new(500, 705, 0);
         write!(printer, "{:x}", send_status).unwrap();
         return send_status;
