@@ -728,36 +728,12 @@ pub fn send_frame(mut buf: Vec<u8>) -> u8 {
 pub fn send_buf_frame(buf: DmaBox<[u8]>) -> u8 {
     unsafe {
         let current_idx = unsafe { *CURRENT_TX_IDX.lock() };
+        let idx = { (*CURRENT_TX_IDX.lock()).clone() };
+        *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
+
         TX_DESC_DATA[current_idx].length = buf.len() as u16;
         TX_DESC_DATA[current_idx].tx_buf_address.desc_base_low = buf.as_ptr() as u32;
         TX_DESC_DATA[current_idx].sta_rsv = 0;
-
-        let mut printer = Printer::new(600, 500, 0);
-        write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA[current_idx] as *mut TxDesc as u32 }).unwrap();
-        let mut printer = Printer::new(600, 515, 0);
-        write!(printer, "{:x}", unsafe { TX_DESC_DATA[current_idx].tx_buf_address.low() }).unwrap();
-
-        // let mut printer = Printer::new(600, 530, 0);
-        // write!(printer, "{:x}", TX_DESC_DATA[current_idx].length).unwrap();
-        let mut printer = Printer::new(600, 545, 0);
-        write!(printer, "{:x}", current_idx).unwrap();
-        let mut printer = Printer::new(600, 560, 0);
-        write!(printer, "{:x}", &mut TX_DESC_DATA[current_idx].sta_rsv as *mut u8 as u32).unwrap();
-        let mut printer = Printer::new(600, 575, 0);
-        write!(printer, "{:x}", TX_DESC_DATA[current_idx].sta_rsv).unwrap();
-
-
-        // let mut current_txdesc: TxDesc = unsafe { TX_DESC_DATA[current_idx] };
-        let mut printer = Printer::new(500, 545, 0);
-        write!(printer, "{:x}", &mut read_mem!(&TX_DESC_DATA[current_idx]) as *mut TxDesc as u32).unwrap();
-        let mut printer = Printer::new(500, 560, 0);
-        write!(printer, "{:x}", &mut read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv as *mut u8 as u32).unwrap();
-        let mut printer = Printer::new(500, 575, 0);
-        write!(printer, "{:x}", read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv).unwrap();
-
-
-        let idx = { (*CURRENT_TX_IDX.lock()).clone() };
-        *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
 
         set_nic_reg(NIC_REG_TDT, unsafe { *CURRENT_TX_IDX.lock() as u32 });
         let mut send_status: u8 = 0;
@@ -813,28 +789,6 @@ pub fn send_test_frame() -> u8 {
         TX_DESC_DATA[current_idx].tx_buf_address.desc_base_low = buf.as_ptr() as u32;
 
         TX_DESC_DATA[current_idx].sta_rsv = 0;
-
-        // let mut printer = Printer::new(700, 500, 0);
-        // write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA[current_idx] as *mut TxDesc as u32 }).unwrap();
-        // let mut printer = Printer::new(700, 515, 0);
-        // write!(printer, "{:x}", unsafe { TX_DESC_DATA[current_idx].tx_buf_address.low() }).unwrap();
-        //
-        // let mut printer = Printer::new(700, 545, 0);
-        // write!(printer, "{:x}", current_idx).unwrap();
-        // let mut printer = Printer::new(700, 560, 0);
-        // write!(printer, "{:x}", &mut TX_DESC_DATA[current_idx].sta_rsv as *mut u8 as u32).unwrap();
-        // let mut printer = Printer::new(700, 575, 0);
-        // write!(printer, "{:x}", TX_DESC_DATA[current_idx].sta_rsv).unwrap();
-        //
-        //
-        // let mut current_txdesc: TxDesc = unsafe { TX_DESC_DATA[current_idx] };
-        // let mut printer = Printer::new(600, 545, 0);
-        // write!(printer, "{:x}", &mut read_mem!(&TX_DESC_DATA[current_idx]) as *mut TxDesc as u32).unwrap();
-        // let mut printer = Printer::new(600, 560, 0);
-        // write!(printer, "{:x}", &mut read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv as *mut u8 as u32).unwrap();
-        // let mut printer = Printer::new(600, 575, 0);
-        // write!(printer, "{:x}", read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv).unwrap();
-
 
         let idx = { (*CURRENT_TX_IDX.lock()).clone() };
         *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
