@@ -95,3 +95,6 @@ od:
 
 test:
 	cd ${KERNEL_DIR}; set RUST_BACKTRACE=1; `which cargo` xtest
+
+dump: ./target/i686-unknown-linux-gnu/debug/librios.a
+	gobjdump -d -S -M intel ./target/i686-unknown-linux-gnu/debug/librios.a > rios.obj
