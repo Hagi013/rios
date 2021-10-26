@@ -54,12 +54,9 @@ use allocator::LockedHeap;
 use allocator::frame_allocator::LockedFrameHeap;
 
 #[global_allocator]
-static mut ALLOCATOR: LockedHeap = LockedHeap;
-lazy_static! {
-    static ref TABLE_ALLOCATOR: LockedFrameHeap = {
-        LockedFrameHeap::new()
-    };
-}
+static mut ALLOCATOR: LockedHeap = LockedHeap {
+    heap: Mutex::new(None),
+};
 
 #[allow(unused_imports)]
 pub mod spin;
@@ -79,7 +76,16 @@ pub mod exception;
 
 pub mod drivers;
 use drivers::bus::pci;
-use drivers::net::e1000;
+use drivers::net::{e1000, arp, ethernet, net_util};
+
+pub mod memory;
+use memory::dma::{
+    init_dma,
+    DMA_ALLOCATOR,
+};
+
+#[macro_use]
+use memory::volatile::*;
 
 fn init_heap() {
     // let heap_start: usize = 0x00e80000;
@@ -110,6 +116,8 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     init_heap();
     unsafe { set_kernel_table_allocator(&ALLOCATOR) };
 
+    // Direct Memory Access用のHeapを取得
+    init_dma();
 
     Graphic::putfont_asc(210, 85, 0, "-1-1-1-1");
     Graphic::putfont_asc(210, 100, 0, "0000");
@@ -127,11 +135,11 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
 
     pci::dump_vid_did();
     // pci::dump_command_status();
-    pci::dump_bar(); //
+    pci::dump_bar();
     // pci::test_nic_set();
     // pci::set_pci_intr_disable();
     pci::set_bus_master_en();
-    pci::nic_init(); 
+    pci::nic_init();
     // pci::tx_init();
     // pci::dump_nic_ims();
 
@@ -148,10 +156,18 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
             match keyboard::get_data() {
                 Ok(data) => {
                     asmfunc::io_sti();
-                    Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
-                    let mut send_data: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
-                    send_data.push(data as u8);
-                    pci::send_frame(send_data);
+                    if data == 3 {
+                        arp::send_arp_packet(
+                            &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
+                            &[192, 168, 56, 102],
+                        );
+                        pci::send_frame(vec![data as u8]);
+                    } else {
+                        Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
+                        let mut send_data: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
+                        send_data.push(data as u8);
+                        pci::send_frame(send_data);
+                    }
                 },
                 Err(_) => asmfunc::io_sti(),
             };
@@ -230,6 +246,8 @@ fn alloc_error_handler(layout: Layout) -> ! {
     Graphic::putfont_asc(0, 400, 0, "alloc_error_handler!!!!!");
     let mut printer = Printer::new(0, 500, 0);
     write!(printer, "{:?}", layout.size()).unwrap();
+    let mut printer = Printer::new(0, 515, 0);
+    write!(printer, "{:?}", layout.align()).unwrap();
 
     loop {
         asmfunc::io_hlt();
