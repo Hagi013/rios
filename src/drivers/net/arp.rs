@@ -17,7 +17,13 @@ use crate::memory::dma::{
 
 enum ArpType {
     ArpRequest = 1,
-    AroReply = 2,
+    ArpReply = 2,
+}
+
+impl ArpType {
+    fn is_reply(opcode: u16) -> bool {
+        opcode == ArpType::ArpReply as u16
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -42,7 +48,7 @@ static mut ARP_TABLE: [ArpTableEntry; ARP_TABLE_NUM] = [ArpTableEntry::new_const
 const BROADCAST_MAC_ADDR: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
 #[repr(C)]
-struct Arp {
+pub struct Arp {
     hardware_type: u16,
     protocol: u16,
     hardware_addr_len: u8,
@@ -71,13 +77,39 @@ impl Arp {
             DmaBox::from(s)
         }
     }
+
+    pub fn parse_reply_buf(data: DmaBox<[u8]>) -> Option<Arp> {
+        let protocol = (data[2] as u16) << 8 | data[3] as u16;
+        let opcode =  (data[6] as u16) << 8 | data[7] as u16;
+
+        if protocol == ETHERNET_TYPE_IP && ArpType::is_reply(opcode) {
+            Some(Self {
+                hardware_type: (data[0] as u16) << 8 | data[1] as u16,
+                protocol,
+                hardware_addr_len: data[4],
+                protocol_addr_len: data[5],
+                opcode,
+                src_hardware_addr: [data[8], data[9], data[10], data[11], data[12], data[13]],
+                src_protocol_addr: [data[14], data[15], data[16], data[17]],
+                dst_hardware_addr: [data[18], data[19], data[20], data[21], data[22], data[23]],
+                dst_protocol_addr: [data[24], data[25], data[26], data[27]],
+
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_src_hardware_addr(&self) -> [u8; 6] {
+        self.src_hardware_addr
+    }
 }
 
 
 pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4]) -> Result<(), String> {
     let src_mac_addr: [u8; 6] = get_mac_addr();
     // let src_protocol_addr: [u8; 4] = [10, 0, 2, 14];
-    let src_protocol_addr: [u8; 4] = [192, 168, 56, 102];
+    let src_protocol_addr: [u8; 4] = [192, 168, 56, 101];
     let hardware_addr_len: u8 = 6;
     let protocol_addr_len: u8 = 4;
     let arp_opcode = ArpType::ArpRequest; // 1
@@ -102,9 +134,9 @@ pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4])
     let mut printer = Printer::new(700, 700, 0);
     // write!(printer, "{:x}", &v as *const Vec<u8> as u32).unwrap();
     write!(printer, "{:x}", v.as_ptr() as *const u8 as u32).unwrap();
-    let mut printer = Printer::new(700, 715, 0);
-    write!(printer, "{:x}", v[0]).unwrap();
-    let mut printer = Printer::new(700, 730, 0);
-    write!(printer, "{:x}", v[2]).unwrap();
+    // let mut printer = Printer::new(700, 715, 0);
+    // write!(printer, "{:x}", v[0]).unwrap();
+    // let mut printer = Printer::new(700, 730, 0);
+    // write!(printer, "{:x}", v[2]).unwrap();
     send_ethernet_packet(BROADCAST_MAC_ADDR, v, size_of::<Arp>(), ETHERNET_TYPE_ARP)
 }

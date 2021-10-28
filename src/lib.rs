@@ -86,6 +86,7 @@ use memory::dma::{
 
 #[macro_use]
 use memory::volatile::*;
+use crate::drivers::net::ethernet::EthernetHdr;
 
 fn init_heap() {
     // let heap_start: usize = 0x00e80000;
@@ -94,7 +95,7 @@ fn init_heap() {
     let heap_end: usize = 0x3e970000; // 0x3fff0000;
 
     let heap_size: usize = heap_end - heap_start;
-    let mut printer = Printer::new(0, 80, 0);
+    let mut printer = Printer::new(0, 300, 0);
     write!(printer, "{:x}", heap_size).unwrap();
     unsafe { ALLOCATOR.init(heap_start, heap_size) };
 }
@@ -147,7 +148,32 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
 
     loop {
         asmfunc::io_cli();
+
         let frame = pci::receive_frame();
+        let mut printer = Printer::new(10, 30, 0);
+        write!(printer, "{:?}", frame.len()).unwrap();
+        if frame.len() > 0 {
+            let parsed_ethernet_header = EthernetHdr::parse_from_frame(frame);
+            if let Some(ethernet_header) = parsed_ethernet_header {
+                if ethernet_header.is_arp_type() {
+                    for (idx, b) in ethernet_header.get_src_mac_addr().iter().enumerate() {
+                        let mut printer = Printer::new((idx * 15) as u32, 60, 0);
+                        write!(printer, "{:x}", b).unwrap();
+                    }
+                    let parsed_arp = arp::Arp::parse_reply_buf(ethernet_header.get_data());
+                    match parsed_arp {
+                        Some(arp) => {
+                            for (idx, b) in arp.get_src_hardware_addr().iter().enumerate() {
+                                let mut printer = Printer::new((idx * 15) as u32, 45, 0);
+                                write!(printer, "{:x}", b).unwrap();
+                            }
+                        },
+                        None => {},
+                    }
+                }
+            }
+        }
+
         if !keyboard::is_existing() && !mouse::is_existing() {
             asmfunc::io_stihlt();
             continue;
@@ -161,28 +187,13 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                             &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
                             &[192, 168, 56, 102],
                         );
-                        pci::send_frame(vec![data as u8]);
                     } else {
                         Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
-                        let mut send_data: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
-                        send_data.push(data as u8);
-                        pci::send_frame(send_data);
                     }
                 },
                 Err(_) => asmfunc::io_sti(),
             };
             idx += 8;
-        }
-        let mut printer = Printer::new(10, 30, 0);
-        write!(printer, "{:?}", frame.len()).unwrap();
-        if frame.len() > 0 {
-            let mut frame_idx: usize = 0;
-            frame.iter().for_each(|b| {
-                let mut printer = Printer::new(frame_idx as u32, 45, 0);
-                frame_idx += 8;
-                write!(printer, "{:?}", b).unwrap();
-            });
-            frame_idx = 0;
         }
         if mouse::is_existing() {
             match mouse::get_data() {

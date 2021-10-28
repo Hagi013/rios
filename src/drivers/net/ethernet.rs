@@ -30,6 +30,49 @@ impl EthernetHdr {
         write!(printer, "{:?}", s.len()).unwrap();
         DmaBox::from(s)
     }
+
+    pub fn get_src_mac_addr(&self) -> &[u8; 6] {
+        &self.src_mac_addr
+    }
+
+    pub fn is_arp_type(&self) -> bool {
+        self.ether_type == ETHERNET_TYPE_ARP
+    }
+
+    pub fn is_ip_type(&self) -> bool {
+        self.ether_type == ETHERNET_TYPE_IP
+    }
+
+    pub fn get_type(&self) -> u16 {
+        self.ether_type
+    }
+
+    pub fn get_data(&self) -> DmaBox<[u8]> {
+        self.payload.clone()
+    }
+
+    pub fn parse_from_frame(frame: Vec<u8>) -> Option<Self> {
+        let ether_type = (frame[12] as u16) << 8 | frame[13] as u16;
+        let mut printer = Printer::new(30, 75, 0);
+        write!(printer, "{:x}", frame.len() as u32).unwrap();
+        let mut printer = Printer::new(30, 90, 0);
+        write!(printer, "{:x}", frame[12]).unwrap();
+        let mut printer = Printer::new(50, 90, 0);
+        write!(printer, "{:x}", frame[13]).unwrap();
+        let mut printer = Printer::new(30, 105, 0);
+        write!(printer, "{:x}", ether_type as u32).unwrap();
+
+        if ether_type == ETHERNET_TYPE_ARP {
+            Some(Self {
+                dst_mac_addr: [frame[0], frame[1], frame[2], frame[3], frame[4], frame[5]],
+                src_mac_addr: [frame[6], frame[7], frame[8], frame[9], frame[10], frame[11]],
+                ether_type,
+                payload: DmaBox::from(&frame[14..]),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 
