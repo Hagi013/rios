@@ -9,6 +9,7 @@ use super::net_util::{switch_endian16, switch_endian32, any_as_u8_vec, any_as_u8
 
 use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
+use core::ops::Add;
 
 use crate::memory::dma::{
     DmaBox,
@@ -27,7 +28,7 @@ impl ArpType {
 }
 
 #[derive(Clone, Copy)]
-struct ArpTableEntry {
+pub struct ArpTableEntry {
     ip_addr: [u8; 4],
     mac_addr: [u8; 6],
 }
@@ -39,11 +40,85 @@ impl ArpTableEntry {
             mac_addr: [0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
         }
     }
+
+    fn is_initial_state(&self) -> bool {
+        self.ip_addr == [0x0, 0x0, 0x0, 0x0] && self.mac_addr == [0x0, 0x0, 0x0, 0x0, 0x0, 0x0]
+    }
+
+    fn same_ip_addr(&self, ip: &[u8; 4]) -> bool {
+        if ip == &[0x0, 0x0, 0x0, 0x0] { return false; }
+        ip == &self.ip_addr
+    }
+
+    fn same_mac_addr(&self, mac_addr: &[u8; 6]) -> bool {
+        if mac_addr == &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0] { return false; }
+        mac_addr == &self.mac_addr
+    }
+
+    pub fn get_ip_addr(&self) -> [u8; 4] {
+        self.ip_addr
+    }
+
+    pub fn get_mac_addr(&self) -> [u8; 6] {
+        self.mac_addr
+    }
+}
+
+struct ArpTable([ArpTableEntry; ARP_TABLE_NUM]);
+
+impl ArpTable {
+    const fn new() -> Self {
+        ArpTable([ArpTableEntry::new_const(); ARP_TABLE_NUM])
+    }
+
+    fn addable_idx(&self, ip: &[u8; 4]) -> usize {
+        for (idx, entry) in self.0.iter().enumerate() {
+            if entry.is_initial_state() { return idx; }
+            if entry.same_ip_addr(ip) { return idx; }
+        }
+        return self.0.len() - 1;
+    }
+
+    fn add(&mut self, ip_addr: [u8; 4], mac_addr: [u8; 6]) {
+        let idx = self.addable_idx(&ip_addr);
+        self.0[idx] = ArpTableEntry {
+            ip_addr,
+            mac_addr,
+        };
+    }
+
+    fn get_mac_addr(&self, ip_addr: &[u8; 4]) -> Option<[u8; 6]> {
+        for entry in self.0.iter() {
+            if entry.same_ip_addr(ip_addr) { return Some(entry.mac_addr) }
+        }
+        None
+    }
+
+    fn get_ip_addr(&self, mac_addr: &[u8; 6]) -> Option<[u8; 4]> {
+        for entry in self.0.iter() {
+            if entry.same_mac_addr(mac_addr) { return Some(entry.ip_addr) }
+        }
+        None
+    }
+
+    fn get_entry_from_ip_addr(&self, ip_addr: &[u8; 4]) -> Option<ArpTableEntry> {
+        for entry in self.0.iter() {
+            if entry.same_ip_addr(ip_addr) { return Some(entry.clone()) }
+        }
+        None
+    }
+
+    fn get_entry_from_mac_addr(&self, mac_addr: &[u8; 6]) -> Option<ArpTableEntry> {
+        for entry in self.0.iter() {
+            if entry.same_mac_addr(mac_addr) { return Some(entry.clone()) }
+        }
+        None
+    }
 }
 
 const ARP_TABLE_NUM: usize = 512;
-static mut ARP_TABLE: [ArpTableEntry; ARP_TABLE_NUM] = [ArpTableEntry::new_const(); ARP_TABLE_NUM];
-
+// static mut ARP_TABLE: [ArpTableEntry; ARP_TABLE_NUM] = [ArpTableEntry::new_const(); ARP_TABLE_NUM];
+static mut ARP_TABLE: ArpTable = ArpTable::new();
 
 const BROADCAST_MAC_ADDR: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
@@ -93,7 +168,6 @@ impl Arp {
                 src_protocol_addr: [data[14], data[15], data[16], data[17]],
                 dst_hardware_addr: [data[18], data[19], data[20], data[21], data[22], data[23]],
                 dst_protocol_addr: [data[24], data[25], data[26], data[27]],
-
             })
         } else {
             None
@@ -132,11 +206,17 @@ pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4])
     };
     let v = arp_packet.to_slice();
     let mut printer = Printer::new(700, 700, 0);
-    // write!(printer, "{:x}", &v as *const Vec<u8> as u32).unwrap();
     write!(printer, "{:x}", v.as_ptr() as *const u8 as u32).unwrap();
-    // let mut printer = Printer::new(700, 715, 0);
-    // write!(printer, "{:x}", v[0]).unwrap();
-    // let mut printer = Printer::new(700, 730, 0);
-    // write!(printer, "{:x}", v[2]).unwrap();
     send_ethernet_packet(BROADCAST_MAC_ADDR, v, size_of::<Arp>(), ETHERNET_TYPE_ARP)
+}
+
+pub fn receive_arp_reply(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {
+    let parsed_arp = Arp::parse_reply_buf(buf);
+    if let Some(arp) = parsed_arp {
+        unsafe {
+            ARP_TABLE.add(arp.src_protocol_addr, arp.src_hardware_addr);
+            return ARP_TABLE.get_entry_from_ip_addr(&arp.src_protocol_addr);
+        }
+    }
+    None
 }

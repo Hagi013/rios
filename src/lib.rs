@@ -160,10 +160,10 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                         let mut printer = Printer::new((idx * 15) as u32, 60, 0);
                         write!(printer, "{:x}", b).unwrap();
                     }
-                    let parsed_arp = arp::Arp::parse_reply_buf(ethernet_header.get_data());
+                    let parsed_arp = arp::receive_arp_reply(ethernet_header.get_data());
                     match parsed_arp {
                         Some(arp) => {
-                            for (idx, b) in arp.get_src_hardware_addr().iter().enumerate() {
+                            for (idx, b) in arp.get_mac_addr().iter().enumerate() {
                                 let mut printer = Printer::new((idx * 15) as u32, 45, 0);
                                 write!(printer, "{:x}", b).unwrap();
                             }
