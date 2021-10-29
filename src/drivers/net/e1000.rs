@@ -1,11 +1,15 @@
-use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
+use alloc::vec::Vec;
+use crate::arch::graphic::{Graphic, Printer, print_str};
+use super::super::bus::pci::{send_frame, send_buf_frame, receive_frame};
+use crate::memory::dma::DmaBox;
 
 
 use super::super::bus::pci::{
   get_nic_reg,
   set_nic_reg,
 };
+use alloc::string::String;
 
 const NIC_REG_EERD: u16 = 0x0014;
 
@@ -37,7 +41,7 @@ pub fn get_eeprom_data(eeprom_addr: u8) -> i32 {
     return -1;
 }
 
-pub fn get_mac_addr() {
+pub fn get_mac_addr() -> [u8; 6] {
     let eeprom_accessible = get_eeprom_data(0x00);
     let mut printer = Printer::new(300, 230, 0);
     write!(printer, "{:?}", eeprom_accessible).unwrap();
@@ -48,15 +52,37 @@ pub fn get_mac_addr() {
         print_str(300, 300, "EEPROM NOT ACCESSIBLE.", 0);
     }
 
-    let mac_1_0: u16 = get_eeprom_data(0x00) as u16;
-    let mac_3_2: u16 = get_eeprom_data(0x01) as u16;
-    let mac_5_4: u16 = get_eeprom_data(0x02) as u16;
-    let mac_address: [u16; 6] = [mac_1_0 & 0xff, mac_1_0 >> 8, mac_3_2 & 0xff, mac_3_2 >> 8, mac_5_4 & 0xff, mac_5_4 >> 8];
+    let mac_1_0: u32 = get_eeprom_data(0x00) as u32;
+    let mac_3_2: u32 = get_eeprom_data(0x01) as u32;
+    let mac_5_4: u32 = get_eeprom_data(0x02) as u32;
+    let mac_address: [u8; 6] = [(mac_1_0 & 0xff) as u8, (mac_1_0 >> 8) as u8, (mac_3_2 & 0xff) as u8, (mac_3_2 >> 8) as u8, (mac_5_4 & 0xff) as u8, (mac_5_4 >> 8) as u8];
 
     for (idx, c) in mac_address.iter().enumerate() {
         let mut printer = Printer::new(300 + idx as u32 * 15, 345, 0);
         write!(printer, "{:x}", c).unwrap();
     }
+    mac_address
 }
 
 
+// pub fn e1000_send_packet(mut buf: Vec<u8>) -> Result<(), String> {
+//     let mut printer = Printer::new(700, 605, 0);
+//     write!(printer, "{:x}", &buf as *const Vec<u8> as u32).unwrap();
+//     let status = send_frame(buf);
+//     if status != 0 {
+//         let mut printer = Printer::new(0, 600, 0);
+//         write!(printer, "{:x}", status).unwrap();
+//     }
+//     Ok(())
+// }
+
+pub fn e1000_send_packet(mut buf: DmaBox<[u8]>) -> Result<(), String> {
+    let mut printer = Printer::new(700, 605, 0);
+    write!(printer, "{:x}", &buf as *const DmaBox<[u8]> as u32).unwrap();
+    let status = send_buf_frame(buf);
+    if status != 0 {
+        let mut printer = Printer::new(0, 600, 0);
+        write!(printer, "{:x}", status).unwrap();
+    }
+    Ok(())
+}
