@@ -215,8 +215,21 @@ pub fn receive_arp_reply(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {
     if let Some(arp) = parsed_arp {
         unsafe {
             ARP_TABLE.add(arp.src_protocol_addr, arp.src_hardware_addr);
+            ARP_TABLE.add(arp.dst_protocol_addr, arp.dst_hardware_addr);
             return ARP_TABLE.get_entry_from_ip_addr(&arp.src_protocol_addr);
         }
     }
     None
+}
+
+pub fn get_my_hard_and_ip_addr() -> ([u8; 6], Option<[u8; 4]>) {
+    let my_hardware_addr = get_mac_addr();
+    let my_ip_addr = get_ip_addr_from_hardware_addr(&my_hardware_addr);
+    (my_hardware_addr, my_ip_addr)
+}
+
+pub fn get_ip_addr_from_hardware_addr(hardware_addr: &[u8; 6]) -> Option<[u8; 4]> {
+    unsafe {
+        ARP_TABLE.get_ip_addr(hardware_addr)
+    }
 }
