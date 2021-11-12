@@ -137,15 +137,15 @@ pub struct Arp {
 
 impl Arp {
     fn to_slice(&self) -> DmaBox<[u8]> {
-        let mut slice: &[u8] = &self.hardware_type.to_be_bytes();
-        let mut slice: &[u8] = &[&slice[..], &self.protocol.to_be_bytes()].concat();
-        let mut slice: &[u8] = &[&slice[..], &self.hardware_addr_len.to_be_bytes()].concat();
-        let mut slice: &[u8] = &[&slice[..], &self.protocol_addr_len.to_be_bytes()].concat();
-        let mut slice: &[u8] = &[&slice[..], &self.opcode.to_be_bytes()].concat();
-        let mut slice: &[u8] = &[&slice[..], &self.src_hardware_addr[..]].concat();
-        let mut slice: &[u8] = &[&slice[..], &self.src_protocol_addr[..]].concat();
-        let mut slice: &[u8] = &[&slice[..], &self.dst_hardware_addr[..]].concat();
-        let mut s: &[u8] = &[&slice[..], &self.dst_protocol_addr[..]].concat();
+        let slice: &[u8] = &self.hardware_type.to_be_bytes();
+        let slice: &[u8] = &[&slice[..], &self.protocol.to_be_bytes()].concat();
+        let slice: &[u8] = &[&slice[..], &self.hardware_addr_len.to_be_bytes()].concat();
+        let slice: &[u8] = &[&slice[..], &self.protocol_addr_len.to_be_bytes()].concat();
+        let slice: &[u8] = &[&slice[..], &self.opcode.to_be_bytes()].concat();
+        let slice: &[u8] = &[&slice[..], &self.src_hardware_addr[..]].concat();
+        let slice: &[u8] = &[&slice[..], &self.src_protocol_addr[..]].concat();
+        let slice: &[u8] = &[&slice[..], &self.dst_hardware_addr[..]].concat();
+        let s: &[u8] = &[&slice[..], &self.dst_protocol_addr[..]].concat();
         let mut printer = Printer::new(100, 560, 0);
         write!(printer, "{:?}", s.len()).unwrap();
         unsafe {

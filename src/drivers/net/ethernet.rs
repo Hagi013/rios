@@ -22,10 +22,10 @@ pub struct EthernetHdr {
 
 impl EthernetHdr {
     fn to_slice(&self) -> DmaBox<[u8]> {
-        let mut slice: &[u8] = &self.dst_mac_addr[..];
-        let mut slice: &[u8] = &[&slice[..], &self.src_mac_addr[..]].concat();
-        let mut slice: &[u8] = &[&slice[..], &self.ether_type.to_be_bytes()].concat();
-        let mut s: &[u8] = &[&slice[..], &self.payload[..]].concat();
+        let slice: &[u8] = &self.dst_mac_addr[..];
+        let slice: &[u8] = &[&slice[..], &self.src_mac_addr[..]].concat();
+        let slice: &[u8] = &[&slice[..], &self.ether_type.to_be_bytes()].concat();
+        let s: &[u8] = &[&slice[..], &self.payload[..]].concat();
         let mut printer = Printer::new(115, 560, 0);
         write!(printer, "{:?}", s.len()).unwrap();
         DmaBox::from(s)
