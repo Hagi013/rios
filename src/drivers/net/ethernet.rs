@@ -24,13 +24,15 @@ pub struct EthernetHdr {
 
 impl EthernetHdr {
     fn to_slice(&self) -> DmaBox<[u8]> {
-        let slice: &[u8] = &self.dst_mac_addr[..];
-        let slice: &[u8] = &[&slice[..], &self.src_mac_addr[..]].concat();
-        let slice: &[u8] = &[&slice[..], &self.ether_type.to_be_bytes()].concat();
-        let s: &[u8] = &[&slice[..], &self.payload[..]].concat();
-        let mut printer = Printer::new(115, 560, 0);
-        write!(printer, "{:?}", s.len()).unwrap();
-        DmaBox::from(s)
+        let slice: &[u8] = &[
+            &self.dst_mac_addr[..],
+            // 何故か `&self.src_mac_addr[..]` だと先頭に `0xffff` が付加されるのでこれで回避する・・・
+            // ToDo 普通に `&self.src_mac_addr[..]` だとだめな理由を調べる(networkがarpのみの時代は問題なく動いていたはず・・)
+            self.src_mac_addr.clone().as_ref()[..].as_ref(),
+            &self.ether_type.to_be_bytes()[..],
+            &self.payload[..]
+        ].concat();
+        DmaBox::from(slice)
     }
 
     pub fn get_src_mac_addr(&self) -> &[u8; 6] {
@@ -80,7 +82,6 @@ impl EthernetHdr {
 
 pub fn send_ethernet_packet(dst_mac_addr: [u8; 6], data: DmaBox<[u8]>, len: usize, protocol: u16) -> Result<(), String> {
     let src_mac_addr = get_mac_addr();
-
     let ethernet_hdr = EthernetHdr {
         dst_mac_addr,
         src_mac_addr,
@@ -89,8 +90,6 @@ pub fn send_ethernet_packet(dst_mac_addr: [u8; 6], data: DmaBox<[u8]>, len: usiz
         payload: data,
     };
     let v = ethernet_hdr.to_slice();
-    // let mut printer = Printer::new(800, 590, 0);
-    // write!(printer, "{:x}", v.get(15).unwrap() as *const u8 as u32).unwrap();
     let mut printer = Printer::new(800, 605, 0);
     write!(printer, "{:x}", v.as_ptr() as *const u8 as u32).unwrap();
     e1000_send_packet(v)
