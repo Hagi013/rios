@@ -9,6 +9,9 @@ use crate::arp;
 
 use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
+use crate::drivers::net::ethernet::{send_ethernet_packet, ETHERNET_TYPE_IP, DEFAULT_ETHERNET_ADDRESS};
+
+pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 101];
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -47,6 +50,7 @@ pub struct IpHdr {
 
 impl IpHdr {
     fn new() -> IpHdr {
+        let empty_slice: &[u8] = &[];
         IpHdr {
             version_ihl: VersionIhl::Ip,
             escp_ecn: 0x00,
@@ -58,7 +62,7 @@ impl IpHdr {
             checksum: 0x00,
             src_ip_addr: [0x00, 0x00, 0x00, 0x00],
             dst_ip_addr: [0x00, 0x00, 0x00, 0x00],
-            payload: DmaBox::from(&[]),
+            payload: DmaBox::from(empty_slice),
         }
     }
 }
@@ -136,10 +140,19 @@ impl IpHdr {
         let sum: u32 = slice.iter().fold(0, |acc, &cur| { acc + (cur as u32) });
         self.checksum = ((0x0000ffff & sum) as u16 + (sum >> 8) as u16) as u16
     }
+
+    pub fn calc_length(&mut self) -> u16 {
+        self.length = (20 + self.payload.len()) as u16;
+        self.length
+    }
 }
 
 pub fn send_ip_packet(protocol: IpProtocol, dst_ip_addr: &[u8; 4], payload: DmaBox<[u8]>) -> Result<(), String> {
-    let (my_hardware_addr, my_ip_addr) = arp::get_my_hard_and_ip_addr();
+    let (_, my_ip_addr) = match arp::get_my_hard_and_ip_addr() {
+        (hardware_addr, Some(ip_addr)) => (hardware_addr, ip_addr),
+        (hardware_addr, None) => (hardware_addr, DEFAULT_MY_IP),
+        _ => (DEFAULT_ETHERNET_ADDRESS, DEFAULT_MY_IP),
+    };
     let mut ip = IpHdr {
         version_ihl: VersionIhl::Ip,
         escp_ecn: 0x00,
@@ -149,8 +162,24 @@ pub fn send_ip_packet(protocol: IpProtocol, dst_ip_addr: &[u8; 4], payload: DmaB
         ttl: 30,
         protocol,
         checksum: 0x00,
-        src_ip_addr: [0x00, 0x00, 0x00, 0x00],
+        src_ip_addr: my_ip_addr,
         dst_ip_addr: [dst_ip_addr[0], dst_ip_addr[1], dst_ip_addr[2], dst_ip_addr[3]],
         payload,
     };
+    ip.calc_length();
+    ip.calc_checksum();
+
+    // dst_mac_addrをdst_ipからARP_TABLEから取得 or ARPで取得する
+    let dst_mac_addr = match protocol {
+        IpProtocol::Icmp => [0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
+        _ => {
+            match arp::get_hardware_addr_from_ip_addr(dst_ip_addr) {
+                Some(addr) => addr,
+                None => [0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
+            }
+        }
+    };
+    let data = ip.to_slice();
+    let len = data.len();
+    send_ethernet_packet(dst_mac_addr, data, len, ETHERNET_TYPE_IP)
 }

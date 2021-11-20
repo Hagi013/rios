@@ -1,5 +1,8 @@
+use alloc::string::String;
 use alloc::vec::Vec;
 use crate::memory::dma::DmaBox;
+
+use super::ip::{send_ip_packet, IpProtocol};
 
 #[repr(u8)]
 #[derive(Copy, Clone)]
@@ -95,5 +98,9 @@ impl EchoMessage {
     }
 }
 
-
+pub fn send_icmp(dst_ip_addr: &[u8; 4], ) -> Result<(), String> {
+    let mut icmp = EchoMessage::new();
+    icmp.calc_checksum();
+    send_ip_packet(IpProtocol::Icmp, dst_ip_addr, icmp.to_slice())
+}
 

@@ -12,6 +12,8 @@ pub const ETHERNET_TYPE_IP: u16 = 0x0800;
 
 pub const HARDWARE_TYPE_ETHERNET: u16 = 0x01;
 
+pub const DEFAULT_ETHERNET_ADDRESS: [u8; 6] = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+
 #[repr(C)]
 pub struct EthernetHdr {
     dst_mac_addr: [u8; 6],
@@ -78,6 +80,7 @@ impl EthernetHdr {
 
 pub fn send_ethernet_packet(dst_mac_addr: [u8; 6], data: DmaBox<[u8]>, len: usize, protocol: u16) -> Result<(), String> {
     let src_mac_addr = get_mac_addr();
+
     let ethernet_hdr = EthernetHdr {
         dst_mac_addr,
         src_mac_addr,

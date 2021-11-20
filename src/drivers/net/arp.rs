@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use super::e1000::get_mac_addr;
 use super::ethernet::{ETHERNET_TYPE_ARP, ETHERNET_TYPE_IP, HARDWARE_TYPE_ETHERNET, EthernetHdr, send_ethernet_packet};
 use super::net_util::{switch_endian16, switch_endian32, any_as_u8_vec, any_as_u8_slice, push_to_vec};
+use super::ip::DEFAULT_MY_IP;
 
 use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
@@ -183,7 +184,7 @@ impl Arp {
 pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4]) -> Result<(), String> {
     let src_mac_addr: [u8; 6] = get_mac_addr();
     // let src_protocol_addr: [u8; 4] = [10, 0, 2, 14];
-    let src_protocol_addr: [u8; 4] = [192, 168, 56, 101];
+    let src_protocol_addr: [u8; 4] = DEFAULT_MY_IP;
     let hardware_addr_len: u8 = 6;
     let protocol_addr_len: u8 = 4;
     let arp_opcode = ArpType::ArpRequest; // 1
@@ -231,5 +232,11 @@ pub fn get_my_hard_and_ip_addr() -> ([u8; 6], Option<[u8; 4]>) {
 pub fn get_ip_addr_from_hardware_addr(hardware_addr: &[u8; 6]) -> Option<[u8; 4]> {
     unsafe {
         ARP_TABLE.get_ip_addr(hardware_addr)
+    }
+}
+
+pub fn get_hardware_addr_from_ip_addr(ip_addr: &[u8; 4]) -> Option<[u8; 6]> {
+    unsafe {
+        ARP_TABLE.get_mac_addr(ip_addr)
     }
 }

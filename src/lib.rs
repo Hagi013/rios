@@ -76,7 +76,7 @@ pub mod exception;
 
 pub mod drivers;
 use drivers::bus::pci;
-use drivers::net::{e1000, arp, ethernet, net_util};
+use drivers::net::{e1000, arp, ethernet, net_util, icmp};
 
 pub mod memory;
 use memory::dma::{
@@ -187,6 +187,9 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                             &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
                             &[192, 168, 56, 102],
                         );
+                    }
+                    if data == 4 {
+                        icmp::send_icmp(&[192, 168, 56, 102]);
                     } else {
                         Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
                     }
