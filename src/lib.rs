@@ -185,7 +185,7 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                     if data == 3 {
                         arp::send_arp_packet(
                             &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
-                            &[192, 168, 56, 102],
+                            &[192, 168, 56, 101],
                         );
                     }
                     if data == 4 {

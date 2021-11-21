@@ -11,7 +11,7 @@ use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
 use crate::drivers::net::ethernet::{send_ethernet_packet, ETHERNET_TYPE_IP, DEFAULT_ETHERNET_ADDRESS};
 
-pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 101];
+pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 102];
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
