@@ -6,10 +6,13 @@ use super::e1000::{get_mac_addr, e1000_send_packet};
 use super::net_util::{switch_endian16, any_as_u8_vec, push_to_vec};
 use crate::memory::dma::DmaBox;
 use crate::arp;
+use crate::drivers::net::ethernet::{send_ethernet_packet, ETHERNET_TYPE_IP, DEFAULT_ETHERNET_ADDRESS};
+use crate::memory::volatile::{read_mem, write_mem};
 
 use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
-use crate::drivers::net::ethernet::{send_ethernet_packet, ETHERNET_TYPE_IP, DEFAULT_ETHERNET_ADDRESS};
+
+use crate::arch::asmfunc::jmp_stop;
 
 pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 102];
 
@@ -24,6 +27,20 @@ enum VersionIhl {
     Tuba = 0x95, // TUBA
 }
 
+impl VersionIhl {
+    fn get_u8(&self) -> u8 {
+        match self {
+            Self::Ip => 0x45,
+            Self::St => 0x55,
+            Self::Ipv6 => 0x65,
+            Self::TpIx => 0x75,
+            Self::Pip => 0x85,
+            Self::Tuba => 0x95,
+        }
+    }
+}
+
+
 #[repr(u8)]
 #[derive(Clone, Copy)]
 pub enum IpProtocol {
@@ -31,7 +48,6 @@ pub enum IpProtocol {
     Tcp = 0x06,
     Udp = 0x07,
 }
-
 
 #[repr(C)]
 pub struct IpHdr {
@@ -69,7 +85,7 @@ impl IpHdr {
 
 impl IpHdr {
     fn to_slice(&self) -> DmaBox<[u8]> {
-        let slice: &[u8] = &[(self.version_ihl as u8).to_be_bytes()].concat();
+        let slice: &[u8] = &[&self.version_ihl.get_u8().to_be_bytes()[..]].concat();
         let slice: &[u8] = &[&slice[..], &self.escp_ecn.to_be_bytes()].concat();
         let slice: &[u8] = &[&slice[..], &self.length.to_be_bytes()].concat();
         let slice: &[u8] = &[&slice[..], &self.identifier.to_be_bytes()].concat();
@@ -141,9 +157,8 @@ impl IpHdr {
         self.checksum = ((0x0000ffff & sum) as u16 + (sum >> 8) as u16) as u16
     }
 
-    pub fn calc_length(&mut self) -> u16 {
+    pub fn calc_length(&mut self) {
         self.length = (20 + self.payload.len()) as u16;
-        self.length
     }
 }
 
@@ -153,19 +168,22 @@ pub fn send_ip_packet(protocol: IpProtocol, dst_ip_addr: &[u8; 4], payload: DmaB
         (hardware_addr, None) => (hardware_addr, DEFAULT_MY_IP),
         _ => (DEFAULT_ETHERNET_ADDRESS, DEFAULT_MY_IP),
     };
-    let mut ip = IpHdr {
-        version_ihl: VersionIhl::Ip,
-        escp_ecn: 0x00,
-        length: 0x00,
-        identifier: 0x00,
-        flag_flagment_offset: 0x00,
-        ttl: 30,
-        protocol,
-        checksum: 0x00,
-        src_ip_addr: my_ip_addr,
-        dst_ip_addr: [dst_ip_addr[0], dst_ip_addr[1], dst_ip_addr[2], dst_ip_addr[3]],
-        payload,
-    };
+    let mut ip = IpHdr::new();
+    write_mem!(
+        &mut ip as *mut IpHdr,
+        IpHdr {
+            version_ihl: VersionIhl::Ip,
+            escp_ecn: 0x00,
+            length: 0x00,
+            identifier: 0x00,
+            flag_flagment_offset: 0x00,
+            ttl: 30,
+            protocol,
+            checksum: 0x00,
+            src_ip_addr: my_ip_addr,
+            dst_ip_addr: [dst_ip_addr[0], dst_ip_addr[1], dst_ip_addr[2], dst_ip_addr[3]],
+            payload,
+    });
     ip.calc_length();
     ip.calc_checksum();
 
