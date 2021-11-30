@@ -1,6 +1,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use crate::memory::dma::DmaBox;
+use crate::memory::volatile::{write_mem};
 
 use super::ip::{send_ip_packet, IpProtocol};
 
@@ -65,7 +66,6 @@ impl EchoMessage {
         let slice = &[&slice[..], &self.sequence_num.to_be_bytes()].concat();
         let s: &[u8]  = &[&slice[..], &self.data[..]].concat();
         DmaBox::from(s)
-
     }
 
     // チェックサムは、ICMPタイプから始まるICMPメッセージの1の補数の合計について、16ビットの1の補数を取ったものである。
@@ -92,14 +92,15 @@ impl EchoMessage {
         }
         let slice: &[u16] = &[&slice[..], data_u16_list.as_slice()].concat();
         let sum: u32 = slice.iter().fold(0, |acc, &x| { acc + (x as u32) });
-        let upper: u16 = (sum >> 8) as u16;
+        let upper: u16 = (sum >> 16) as u16;
         let bottom: u16 = (sum & 0x0000ffff) as u16;
-        self.icmp_header.checksum = bottom + upper;
+        self.icmp_header.checksum = (bottom + upper) ^ 0xffff;
     }
 }
 
-pub fn send_icmp(dst_ip_addr: &[u8; 4], ) -> Result<(), String> {
+pub fn send_icmp(dst_ip_addr: &[u8; 4]) -> Result<(), String> {
     let mut icmp = EchoMessage::new();
+    write_mem!(&mut icmp as *mut EchoMessage, EchoMessage::new());
     icmp.calc_checksum();
     send_ip_packet(IpProtocol::Icmp, dst_ip_addr, icmp.to_slice())
 }

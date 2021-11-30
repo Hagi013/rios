@@ -145,16 +145,14 @@ impl IpHdr {
         for idx in 0..self.payload.len() / 2 + 1 {
             if idx * 2 >= self.payload.len() { continue; }
             if idx * 2 + 1 >= self.payload.len() {
-                // slice = &[slice[..].as_ref(), &[(self.payload[idx * 2] as u16) << 8]].concat();
                 payload_u16.push((self.payload[idx * 2] as u16) << 8);
                 continue;
             }
-            // slice = &[&slice[..], &[(self.payload[idx * 2] as u16) << 8 | (self.payload[idx * 2 + 1] as u16)]].concat();
             payload_u16.push((self.payload[idx * 2] as u16) << 8 | (self.payload[idx * 2 + 1] as u16));
         }
         let slice: &[u16] = &[&slice[..], payload_u16.as_slice()].concat();
         let sum: u32 = slice.iter().fold(0, |acc, &cur| { acc + (cur as u32) });
-        self.checksum = ((0x0000ffff & sum) as u16 + (sum >> 8) as u16) as u16
+        self.checksum = (((0x0000ffff & sum) as u16 + (sum >> 8) as u16) as u16) ^ 0xffff;
     }
 
     pub fn calc_length(&mut self) {
