@@ -17,6 +17,8 @@ use crate::memory::dma::{
 };
 
 
+#[repr(u16)]
+#[derive(Clone, Copy)]
 enum ArpType {
     ArpRequest = 1,
     ArpReply = 2,
@@ -129,7 +131,7 @@ pub struct Arp {
     protocol: u16,
     hardware_addr_len: u8,
     protocol_addr_len: u8,
-    opcode: u16,
+    opcode: ArpType,
     src_hardware_addr: [u8; 6],
     src_protocol_addr: [u8; 4],
     dst_hardware_addr: [u8; 6],
@@ -142,7 +144,7 @@ impl Arp {
         let slice: &[u8] = &[&slice[..], &self.protocol.to_be_bytes()].concat();
         let slice: &[u8] = &[&slice[..], &self.hardware_addr_len.to_be_bytes()].concat();
         let slice: &[u8] = &[&slice[..], &self.protocol_addr_len.to_be_bytes()].concat();
-        let slice: &[u8] = &[&slice[..], &self.opcode.to_be_bytes()].concat();
+        let slice: &[u8] = &[&slice[..], &(self.opcode as u16).to_be_bytes()].concat();
         let slice: &[u8] = &[&slice[..], &self.src_hardware_addr[..]].concat();
         let slice: &[u8] = &[&slice[..], &self.src_protocol_addr[..]].concat();
         let slice: &[u8] = &[&slice[..], &self.dst_hardware_addr[..]].concat();
@@ -154,11 +156,11 @@ impl Arp {
         }
     }
 
-    pub fn parse_reply_buf(data: DmaBox<[u8]>) -> Option<Arp> {
+    pub fn parse_buf(data: DmaBox<[u8]>) -> Option<Arp> {
         let protocol = (data[2] as u16) << 8 | data[3] as u16;
-        let opcode =  (data[6] as u16) << 8 | data[7] as u16;
+        let opcode =  if ArpType::is_reply((data[6] as u16) << 8 | data[7] as u16) { ArpType::ArpReply } else { ArpType::ArpRequest };
 
-        if protocol == ETHERNET_TYPE_IP && ArpType::is_reply(opcode) {
+        if protocol == ETHERNET_TYPE_IP {
             Some(Self {
                 hardware_type: (data[0] as u16) << 8 | data[1] as u16,
                 protocol,
@@ -199,7 +201,7 @@ pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4])
         hardware_addr_len,
         protocol_addr_len,
         // opcode: switch_endian16(arp_opcode as u16),
-        opcode: arp_opcode as u16,
+        opcode: arp_opcode,
         src_hardware_addr: src_mac_addr,
         src_protocol_addr,
         dst_hardware_addr: [dst_hardware_addr[0], dst_hardware_addr[1], dst_hardware_addr[2], dst_hardware_addr[3], dst_hardware_addr[4], dst_hardware_addr[5]],
@@ -211,16 +213,67 @@ pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4])
     send_ethernet_packet(BROADCAST_MAC_ADDR, v, size_of::<Arp>(), ETHERNET_TYPE_ARP)
 }
 
-pub fn receive_arp_reply(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {
-    let parsed_arp = Arp::parse_reply_buf(buf);
+pub fn receive_arp_packet(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {
+    let parsed_arp = Arp::parse_buf(buf);
     if let Some(arp) = parsed_arp {
-        unsafe {
-            ARP_TABLE.add(arp.src_protocol_addr, arp.src_hardware_addr);
-            ARP_TABLE.add(arp.dst_protocol_addr, arp.dst_hardware_addr);
-            return ARP_TABLE.get_entry_from_ip_addr(&arp.src_protocol_addr);
+        match arp.opcode {
+            ArpType::ArpReply => receive_arp_reply(arp),
+            ArpType::ArpRequest => {
+                send_reply_arp(arp);
+                None
+            },
         }
+    } else {
+        None
     }
-    None
+}
+
+pub fn send_reply_arp(arp: Arp) -> Result<(), String> {
+    // 自分のIPじゃなかったらそのまま終了
+    if arp.dst_protocol_addr != DEFAULT_MY_IP { return Ok(()); }
+
+    let src_mac_addr: [u8; 6] = get_mac_addr();
+    let src_protocol_addr: [u8; 4] = DEFAULT_MY_IP;
+    let hardware_addr_len: u8 = 6;
+    let protocol_addr_len: u8 = 4;
+    let arp_opcode = ArpType::ArpReply; // 1
+    let hardware_type = HARDWARE_TYPE_ETHERNET; // 0x01
+    let protocol = ETHERNET_TYPE_IP; // 0x0800
+
+    let arp_packet = Arp {
+        hardware_type,
+        protocol,
+        hardware_addr_len,
+        protocol_addr_len,
+        opcode: arp_opcode,
+        src_hardware_addr: src_mac_addr,
+        src_protocol_addr,
+        dst_hardware_addr: [arp.src_hardware_addr[0], arp.src_hardware_addr[1], arp.src_hardware_addr[2], arp.src_hardware_addr[3], arp.src_hardware_addr[4], arp.src_hardware_addr[5]],
+        dst_protocol_addr: [arp.src_protocol_addr[0], arp.src_protocol_addr[1], arp.src_protocol_addr[2], arp.src_protocol_addr[3]],
+    };
+    let v = arp_packet.to_slice();
+    let mut printer = Printer::new(700, 715, 0);
+    write!(printer, "{:x}", v.as_ptr() as *const u8 as u32).unwrap();
+    send_ethernet_packet(arp_packet.dst_hardware_addr, v, size_of::<Arp>(), ETHERNET_TYPE_ARP)
+}
+
+// pub fn receive_arp_reply(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {
+//     let parsed_arp = Arp::parse_reply_buf(buf);
+//     if let Some(arp) = parsed_arp {
+//         unsafe {
+//             ARP_TABLE.add(arp.src_protocol_addr, arp.src_hardware_addr);
+//             ARP_TABLE.add(arp.dst_protocol_addr, arp.dst_hardware_addr);
+//             return ARP_TABLE.get_entry_from_ip_addr(&arp.src_protocol_addr);
+//         }
+//     }
+//     None
+// }
+pub fn receive_arp_reply(arp: Arp) -> Option<ArpTableEntry> {
+    unsafe {
+        ARP_TABLE.add(arp.src_protocol_addr, arp.src_hardware_addr);
+        ARP_TABLE.add(arp.dst_protocol_addr, arp.dst_hardware_addr);
+        return ARP_TABLE.get_entry_from_ip_addr(&arp.src_protocol_addr);
+    }
 }
 
 pub fn get_my_hard_and_ip_addr() -> ([u8; 6], Option<[u8; 4]>) {
