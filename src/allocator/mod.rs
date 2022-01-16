@@ -11,9 +11,6 @@ pub mod slab;
 use self::slab::Slab;
 use core::cell::RefCell;
 
-use crate::arch::graphic::{Graphic, Printer, print_str};
-use core::fmt::Write;
-
 pub mod linked_list_allocator;
 pub mod frame_allocator;
 
@@ -72,32 +69,6 @@ impl Heap {
         }
     }
 
-    pub unsafe fn new_test(heap_start_addr: usize, heap_size: usize) -> Self {
-        assert_eq!(
-            heap_start_addr % 4096, 0,
-            "Start address should be page aligned"
-        );
-        assert!(
-            heap_size >= MIN_HEAP_SIZE,
-            "Heap size should be greater or equal to minimum heap size"
-        );
-        assert_eq!(
-            heap_size % MIN_HEAP_SIZE, 0,
-            "Heap size should be a multiple of minimum heap size"
-        );
-        let slab_size: usize = heap_size / NUM_OF_SLABS;
-        Heap {
-            slab_64_bytes: RefCell::new(Slab::new(heap_start_addr, slab_size, 64)),
-            slab_128_bytes: RefCell::new(Slab::new_test(heap_start_addr + slab_size, slab_size, 128)),
-            slab_256_bytes: RefCell::new(Slab::new(heap_start_addr + 2 * slab_size, slab_size, 256)),
-            slab_512_bytes: RefCell::new(Slab::new(heap_start_addr + 3 * slab_size, slab_size, 512)),
-            slab_1024_bytes: RefCell::new(Slab::new(heap_start_addr + 4 * slab_size, slab_size, 1024)),
-            slab_2048_bytes: RefCell::new(Slab::new(heap_start_addr + 5 * slab_size, slab_size, 2048)),
-            slab_4096_bytes: RefCell::new(Slab::new(heap_start_addr + 6 * slab_size, slab_size, 4096)),
-            linked_list_allocator: RefCell::new(linked_list_allocator::Heap::new(heap_start_addr + 7 * slab_size, slab_size)),
-        }
-    }
-
     pub unsafe fn grow(&self, mem_start_addr: usize, mem_size: usize, slab: HeapAllocator) {
         match slab {
             HeapAllocator::Slab64Bytes => self.slab_64_bytes.borrow_mut().grow(mem_start_addr, mem_size),
@@ -114,21 +85,7 @@ impl Heap {
     pub fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         match Heap::layout_to_allocator(&layout) {
             HeapAllocator::Slab64Bytes => self.slab_64_bytes.borrow_mut().allocate(layout),
-            // HeapAllocator::Slab128Bytes => self.slab_128_bytes.borrow_mut().allocate(layout),
-            HeapAllocator::Slab128Bytes => self.slab_128_bytes.borrow_mut().allocate_128(layout),
-            HeapAllocator::Slab256Bytes => self.slab_256_bytes.borrow_mut().allocate(layout),
-            HeapAllocator::Slab512Bytes => self.slab_512_bytes.borrow_mut().allocate(layout),
-            HeapAllocator::Slab1024Bytes => self.slab_1024_bytes.borrow_mut().allocate(layout),
-            HeapAllocator::Slab2048Bytes => self.slab_2048_bytes.borrow_mut().allocate(layout),
-            HeapAllocator::Slab4096Bytes => self.slab_4096_bytes.borrow_mut().allocate(layout),
-            HeapAllocator::LinkedListAllocator => self.linked_list_allocator.borrow_mut().allocate_first_fit(layout),
-        }
-    }
-
-    pub fn allocate_test(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
-        match Heap::layout_to_allocator(&layout) {
-            HeapAllocator::Slab64Bytes => self.slab_64_bytes.borrow_mut().allocate(layout),
-            HeapAllocator::Slab128Bytes => self.slab_128_bytes.borrow_mut().allocate_test(layout),
+            HeapAllocator::Slab128Bytes => self.slab_128_bytes.borrow_mut().allocate(layout),
             HeapAllocator::Slab256Bytes => self.slab_256_bytes.borrow_mut().allocate(layout),
             HeapAllocator::Slab512Bytes => self.slab_512_bytes.borrow_mut().allocate(layout),
             HeapAllocator::Slab1024Bytes => self.slab_1024_bytes.borrow_mut().allocate(layout),
@@ -221,10 +178,6 @@ impl LockedHeap {
         *self.heap.lock() = unsafe { Some(Heap::new(heap_addr_start, size)) };
     }
 
-    pub fn init_test(&self, heap_addr_start: usize, size: usize) {
-        *self.heap.lock() = unsafe { Some(Heap::new_test(heap_addr_start, size)) };
-    }
-
 //    pub unsafe fn new(heap_addr_start: usize, heap_size: usize) -> Self {
 //        LockedHeap(Mutex::new(Some(Heap::new(heap_addr_start, heap_size))))
 //    }
@@ -268,34 +221,6 @@ unsafe impl<'a> Alloc for &'a LockedHeap {
 //         }
 //     }
 }
-
-
-impl LockedHeap {
-    pub fn allocate_test(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
-        if let Some(ref mut heap) = *self.heap.lock() {
-
-            let mut printer = Printer::new(600, 695, 0);
-            write!(printer, "{:?}", "llllllll").unwrap(); // ここまではきた
-            let mut printer = Printer::new(600, 710, 0);
-            write!(printer, "{:?}", layout.size()).unwrap(); // ここまではきた
-            let mut printer = Printer::new(600, 735, 0);
-            write!(printer, "{:?}", layout.align()).unwrap(); // ここまではきた
-
-            heap.allocate_test(layout)
-        } else {
-            panic!("allocate: heap not initialized");
-        }
-    }
-
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        if let Some(ref mut heap) = *self.heap.lock() {
-            heap.deallocate(ptr, layout)
-        } else {
-            panic!("deallocate: heap not initialized");
-        }
-    }
-}
-
 
 unsafe impl GlobalAlloc for LockedHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
