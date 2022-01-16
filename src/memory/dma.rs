@@ -30,7 +30,8 @@ pub static mut DMA_ALLOCATOR: LockedHeap = LockedHeap {
 pub fn init_dma() {
     let heap_start = DMA_START;
     let heap_size: usize = DMA_END - DMA_START;
-    unsafe { DMA_ALLOCATOR.init(heap_start, heap_size) };
+    // unsafe { DMA_ALLOCATOR.init(heap_start, heap_size) };
+    unsafe { DMA_ALLOCATOR.init_test(heap_start, heap_size) };
 }
 
 // ref: https://github.com/glandium/allocator_api/blob/master/src/liballoc/boxed.rs
@@ -247,6 +248,19 @@ impl<'a, T: Copy> From<&'a [T]> for DmaBox<[T]> {
     }
 }
 
+impl<'a, T: Copy> DmaBox<[T]> {
+    pub fn from_test(slice: &'a [T]) -> DmaBox<[T]> {
+        let a = unsafe { &DMA_ALLOCATOR };
+        let mut boxed = unsafe { DmaRawVec::with_capacity_in_test(slice.len(), a).into_box() };
+        let mut printer = Printer::new(600, 620, 0);
+        write!(printer, "{:?}", "hhhhhhhhh").unwrap();
+        boxed.copy_from_slice(slice);
+        let mut printer = Printer::new(600, 650, 0);
+        write!(printer, "{:?}", "jjjjjjjjjjj").unwrap();
+        boxed
+    }
+}
+
 impl<'a> From<&'a str> for DmaBox<str> {
     /// Converts a `&str` into a `Box<str>`
     #[inline]
@@ -446,6 +460,11 @@ impl<T> DmaRawVec<T> {
     }
 
     #[inline]
+    pub fn with_capacity_in_test(cap: usize, a: &'static LockedHeap) -> Self {
+        DmaRawVec::allocate_in_test(cap, false, a)
+    }
+
+    #[inline]
     pub fn with_capacity_zeroed_in(cap: usize, a: &'static LockedHeap) -> Self {
         DmaRawVec::allocate_in(cap, true, a)
     }
@@ -484,6 +503,57 @@ impl<T> DmaRawVec<T> {
             }
         }
     }
+
+    fn allocate_in_test(cap: usize, zeroed: bool, mut a: &'static LockedHeap) -> Self {
+        unsafe {
+            let elem_size = mem::size_of::<T>();
+
+            let alloc_size = cap.checked_mul(elem_size).unwrap_or_else(|| capacity_overflow());
+            alloc_guard(alloc_size).unwrap_or_else(|_| capacity_overflow());
+
+            let ptr = if alloc_size == 0 {
+                NonNull::<T>::dangling()
+            } else {
+                let mut printer = Printer::new(600, 635, 0);
+                write!(printer, "{:x}", alloc_size).unwrap();
+                let align = mem::align_of::<T>();
+                let layout = Layout::from_size_align(alloc_size, align).unwrap();
+
+                let mut printer = Printer::new(500, 620, 0);
+                write!(printer, "{:?}", elem_size).unwrap();
+                let mut printer = Printer::new(500, 635, 0);
+                write!(printer, "{:?}", alloc_size).unwrap();
+                let mut printer = Printer::new(500, 650, 0);
+                write!(printer, "{:?}", align).unwrap();
+
+                let result = if zeroed {
+                    a.allocate_zeroed(layout)
+                } else {
+                    a.allocate_test(layout)
+                };
+                let mut printer = Printer::new(600, 680, 0);
+                write!(printer, "{:?}", "iiiiiiiiii").unwrap();
+                match result {
+                    Ok(ptr) => ptr.cast(),
+                    Err(e) => {
+                        // let mut printer = Printer::new(100, 700, 0);
+                        // write!(printer, "{:?}", e.to_string()).unwrap();
+                        handle_alloc_error(layout)
+                    },
+                }
+            };
+            let mut printer = Printer::new(600, 680, 0);
+            write!(printer, "{:x}", &ptr as *const NonNull<T> as u8).unwrap();
+            let mut printer = Printer::new(600, 695, 0);
+            write!(printer, "{:?}", cap).unwrap();
+            DmaRawVec {
+                ptr: ptr.into(),
+                marker: PhantomData,
+                cap,
+                a
+            }
+        }
+    }
 }
 
 impl<T> DmaRawVec<T> {
@@ -494,6 +564,11 @@ impl<T> DmaRawVec<T> {
     #[inline]
     pub fn with_capacity(cap: usize) -> Self {
         DmaRawVec::allocate_in(cap, false, unsafe { &DMA_ALLOCATOR })
+    }
+
+    #[inline]
+    pub fn with_capacity_test(cap: usize) -> Self {
+        DmaRawVec::allocate_in_test(cap, false, unsafe { &DMA_ALLOCATOR })
     }
 
     #[inline]

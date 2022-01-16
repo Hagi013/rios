@@ -96,7 +96,8 @@ impl IpHdr {
         let slice: &[u8] = &[&slice[..], &self.src_ip_addr[..]].concat();
         let slice: &[u8] = &[&slice[..], &self.dst_ip_addr[..]].concat();
         let s: &[u8] = &[&slice[..], &self.payload[..]].concat();
-        DmaBox::from(s)
+        // DmaBox::from(s)
+        DmaBox::from_test(s)
     }
 
     pub fn get_offset(&self) -> bool {
