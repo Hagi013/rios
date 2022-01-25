@@ -46,7 +46,7 @@ pub extern "C" fn undefined_operation_code_instruction_handler(esp: *const usize
 
 #[no_mangle]
 pub extern "C" fn no_coprocessor_handler(esp: *const usize) {
-    Graphic::putfont_asc(0, 180, 0, "undefined_operation_code_instruction_handler!!!!!");
+    Graphic::putfont_asc(0, 180, 0, "no_coprocessor_handler!!!!!");
     let mut printer = Printer::new(0, 200, 0);
     write!(printer, "{:?}", unsafe { esp.offset(11) }).unwrap();
     loop {
