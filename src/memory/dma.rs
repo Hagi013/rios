@@ -469,11 +469,7 @@ impl<T> DmaRawVec<T> {
                 };
                 match result {
                     Ok(ptr) => ptr.cast(),
-                    Err(e) => {
-                        // let mut printer = Printer::new(100, 700, 0);
-                        // write!(printer, "{:?}", e.to_string()).unwrap();
-                        handle_alloc_error(layout)
-                    },
+                    Err(e) => handle_alloc_error(layout),
                 }
             };
             DmaRawVec {
