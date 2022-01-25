@@ -66,7 +66,7 @@ impl EthernetHdr {
         let mut printer = Printer::new(30, 105, 0);
         write!(printer, "{:x}", ether_type as u32).unwrap();
 
-        if ether_type == ETHERNET_TYPE_ARP {
+        if ether_type == ETHERNET_TYPE_ARP || ether_type == ETHERNET_TYPE_IP {
             Some(Self {
                 dst_mac_addr: [frame[0], frame[1], frame[2], frame[3], frame[4], frame[5]],
                 src_mac_addr: [frame[6], frame[7], frame[8], frame[9], frame[10], frame[11]],
@@ -76,6 +76,10 @@ impl EthernetHdr {
         } else {
             None
         }
+    }
+
+    pub fn get_dst_mac_addr_from_buf(buf: &DmaBox<[u8]>) -> [u8; 6] {
+        [buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]]
     }
 }
 
