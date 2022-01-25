@@ -1,9 +1,14 @@
 use alloc::string::String;
 use alloc::vec::Vec;
+use crate::drivers::net::ip::IpHdr;
 use crate::memory::dma::DmaBox;
 use crate::memory::volatile::{write_mem};
 
-use super::ip::{send_ip_packet, IpProtocol};
+use super::ip::{send_ip_packet, reply_ip_packet, IpProtocol};
+
+use crate::arch::graphic::{Graphic, Printer, print_str};
+use core::fmt::Write;
+use crate::EthernetHdr;
 
 #[repr(u8)]
 #[derive(Copy, Clone)]
@@ -26,11 +31,44 @@ enum IcmpEchoType {
     Traceroute = 30,
 }
 
-#[repr(C)]
-struct IcmpHeader {
+#[repr(C)] // https://ja.wikipedia.org/wiki/Internet_Control_Message_Protocol
+pub struct IcmpHeader {
     icmp_type: IcmpEchoType,
     icmp_code: u8,
     checksum: u16,
+}
+
+impl IcmpHeader {
+    fn check_type_from_payload(buf: DmaBox<[u8]>) -> IcmpEchoType {
+        Self::check_type(buf[0])
+    }
+
+    fn check_type(b: u8) -> IcmpEchoType {
+        if b == IcmpEchoType::EchoReplyMessage as u8 { IcmpEchoType::EchoReplyMessage }
+        else if b == IcmpEchoType::DestinationUnreachableMessage as u8 { IcmpEchoType::DestinationUnreachableMessage }
+        else if b == IcmpEchoType::SourceQuenchMessage as u8 { IcmpEchoType::SourceQuenchMessage }
+        else if b == IcmpEchoType::RedirectMessage as u8 { IcmpEchoType::RedirectMessage }
+        else if b == IcmpEchoType::EchoMessage as u8 { IcmpEchoType::EchoMessage }
+        else if b == IcmpEchoType::RouterAdvertisementMessage as u8 { IcmpEchoType::RouterAdvertisementMessage }
+        else if b == IcmpEchoType::RouterSolicitationMessage as u8 { IcmpEchoType::RouterSolicitationMessage }
+        else if b == IcmpEchoType::TimeExceededMessage as u8 { IcmpEchoType::TimeExceededMessage }
+        else if b == IcmpEchoType::ParameterProblemMessage as u8 { IcmpEchoType::ParameterProblemMessage }
+        else if b == IcmpEchoType::TimestampMessage as u8 { IcmpEchoType::TimestampMessage }
+        else if b == IcmpEchoType::TimestampReplyMessage as u8 { IcmpEchoType::TimestampReplyMessage }
+        else if b == IcmpEchoType::InformationRequestMessage as u8 { IcmpEchoType::InformationRequestMessage }
+        else if b == IcmpEchoType::InformationReplyMessage as u8 { IcmpEchoType::InformationReplyMessage }
+        else if b == IcmpEchoType::AddressMaskRequestMessage as u8 { IcmpEchoType::AddressMaskRequestMessage }
+        else if b == IcmpEchoType::AddressMaskReplyMessage as u8 { IcmpEchoType::AddressMaskReplyMessage }
+        else { IcmpEchoType::Traceroute }
+    }
+
+    fn parse_from_buf(buf: &[u8]) -> IcmpHeader {
+        IcmpHeader {
+            icmp_type: Self::check_type(buf[0]),
+            icmp_code: buf[1],
+            checksum: (buf[2] as u16) << 8 | (buf[3] as u16),
+        }
+    }
 }
 
 #[repr(C)]
@@ -96,12 +134,71 @@ impl EchoMessage {
         let bottom: u16 = (sum & 0x0000ffff) as u16;
         self.icmp_header.checksum = (bottom + upper) ^ 0xffff;
     }
+
+    pub fn parse_from_buf(buf: DmaBox<[u8]>) -> EchoMessage {
+        let mut printer = Printer::new(600, 545, 0);
+        write!(printer, "{:x}", &buf[8..].len()).unwrap();
+        let mut printer = Printer::new(600, 560, 0);
+        write!(printer, "{:x}", &buf[8..][0]).unwrap();
+        let mut printer = Printer::new(615, 560, 0);
+        write!(printer, "{:x}", &buf[8..][buf[8..].len() - 1]).unwrap();
+        EchoMessage {
+            icmp_header: IcmpHeader::parse_from_buf(&buf[0..=3]),
+            identifier: (buf[4] as u16) << 8 | (buf[5] as u16),
+            sequence_num: (buf[6] as u16) << 8 | (buf[7] as u16),
+            data: DmaBox::from(&buf[8..&buf.len() - 4]),
+        }
+    }
 }
+
 
 pub fn send_icmp(dst_ip_addr: &[u8; 4]) -> Result<(), String> {
     let mut icmp = EchoMessage::new();
     write_mem!(&mut icmp as *mut EchoMessage, EchoMessage::new());
     icmp.calc_checksum();
     send_ip_packet(IpProtocol::Icmp, dst_ip_addr, icmp.to_slice())
+}
+
+pub fn receive_icmp(parsed_ethernet_header: EthernetHdr) -> Result<(), String> {
+    let parsed_ip_header = IpHdr::parsed_from_buf(parsed_ethernet_header.get_data());
+    let mut printer = Printer::new(600, 485, 0);
+    write!(printer, "{:?}", parsed_ip_header.is_icmp()).unwrap();
+    match IcmpHeader::check_type_from_payload(parsed_ip_header.get_data()) {
+        IcmpEchoType::EchoMessage => {
+            // ToDo parseできてるかprintして確認
+            let echo_message = EchoMessage::parse_from_buf(parsed_ip_header.get_data());
+
+            let mut printer = Printer::new(600, 500, 0);
+            write!(printer, "{:x}", echo_message.identifier).unwrap();
+            let mut printer = Printer::new(600, 515, 0);
+            write!(printer, "{:x}", echo_message.data.len()).unwrap();
+            let mut printer = Printer::new(600, 530, 0);
+            write!(printer, "{:x}", echo_message.data[0]).unwrap();
+            let mut printer = Printer::new(615, 530, 0);
+            write!(printer, "{:x}", echo_message.data[echo_message.data.len() - 1]).unwrap();
+
+            let mut reply_message = EchoMessage {
+                icmp_header: IcmpHeader {
+                    icmp_type: IcmpEchoType::EchoReplyMessage,
+                    icmp_code: 0x00,
+                    checksum: 0x00,
+                },
+                identifier: echo_message.identifier,
+                sequence_num: echo_message.sequence_num,
+                data: echo_message.data,
+            };
+            reply_message.calc_checksum();
+            let payload = reply_message.to_slice();
+            reply_ip_packet(parsed_ethernet_header, payload);
+            let mut printer = Printer::new(600, 590, 0);
+            write!(printer, "{:?}", "reply icmp").unwrap();
+        },
+        IcmpEchoType::EchoReplyMessage => {
+            // identifierとsequence_numberがこちらから送ったものと一致しているかを確認
+            // 再度送るのであればidentifierは同じ、sequence_numberはインクリメントする
+        },
+        _ => {}
+    }
+    Ok(())
 }
 
