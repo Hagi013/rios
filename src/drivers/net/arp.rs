@@ -293,3 +293,12 @@ pub fn get_hardware_addr_from_ip_addr(ip_addr: &[u8; 4]) -> Option<[u8; 6]> {
         ARP_TABLE.get_mac_addr(ip_addr)
     }
 }
+
+pub fn add_arp_table(ip_addr: &[u8; 4], mac_addr: &[u8; 6]) {
+    unsafe {
+        ARP_TABLE.add(
+            [ip_addr[0], ip_addr[1], ip_addr[2], ip_addr[3]],
+            [mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]],
+        );
+    }
+}
