@@ -651,6 +651,8 @@ pub fn receive_frame() -> Vec<u8> {
     // dump_nic_reg_for_net();
 
     if current_rxdesc.status & NIC_RDESC_STAT_DD == NIC_RDESC_STAT_DD {
+        let mut printer = Printer::new(100, 190, 0);
+        write!(printer, "{:?}", current_rxdesc.length).unwrap(); // この時点でICMPは4バイト多くなってる
         for idx in 0..current_rxdesc.length {
             let byte = unsafe { *(current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize) };
             buf.push(byte);
