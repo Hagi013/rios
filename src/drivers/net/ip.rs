@@ -6,7 +6,7 @@ use super::e1000::{get_mac_addr, e1000_send_packet};
 use super::net_util::{switch_endian16, any_as_u8_vec, push_to_vec};
 use crate::memory::dma::DmaBox;
 use crate::arp;
-use crate::drivers::net::ethernet::{send_ethernet_packet, ETHERNET_TYPE_IP, DEFAULT_ETHERNET_ADDRESS};
+use crate::drivers::net::ethernet::{send_ethernet_packet, ETHERNET_TYPE_IP, DEFAULT_ETHERNET_ADDRESS, EthernetHdr};
 use crate::memory::volatile::{read_mem, write_mem};
 
 use crate::arch::graphic::{Graphic, Printer, print_str};
@@ -14,7 +14,7 @@ use core::fmt::Write;
 
 use crate::arch::asmfunc::jmp_stop;
 
-pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 102];
+pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 103];
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -38,6 +38,15 @@ impl VersionIhl {
             Self::Tuba => 0x95,
         }
     }
+
+    fn parse(version_ihl: u8) -> VersionIhl {
+        if version_ihl == (VersionIhl::Ip as u8) { VersionIhl::Ip }
+        else if version_ihl == (VersionIhl::St as u8) { VersionIhl::St }
+        else if version_ihl == (VersionIhl::Ipv6 as u8) { VersionIhl::Ipv6 }
+        else if version_ihl == (VersionIhl::TpIx as u8) { VersionIhl::TpIx }
+        else if version_ihl == (VersionIhl::Pip as u8) { VersionIhl::Pip }
+        else { VersionIhl::Tuba }
+    }
 }
 
 
@@ -49,10 +58,26 @@ pub enum IpProtocol {
     Udp = 0x07,
 }
 
+impl IpProtocol {
+    fn equals(&self, other: IpProtocol) -> bool {
+        match self {
+            other => true,
+            _ => false,
+        }
+    }
+
+    fn parse(ip_protocol: u8) -> IpProtocol {
+        if ip_protocol == IpProtocol::Icmp as u8 { IpProtocol::Icmp }
+        else if ip_protocol == IpProtocol::Tcp as u8 { IpProtocol::Tcp }
+        else { IpProtocol::Udp }
+    }
+}
+
+
 #[repr(C)]
 pub struct IpHdr {
     version_ihl: VersionIhl,
-    escp_ecn: u8,
+    dscp_ecn: u8, // https://ja.wikipedia.org/wiki/Type_of_Service
     length: u16,
     identifier: u16,
     flag_flagment_offset: u16,
@@ -69,7 +94,7 @@ impl IpHdr {
         let empty_slice: &[u8] = &[];
         IpHdr {
             version_ihl: VersionIhl::Ip,
-            escp_ecn: 0x00,
+            dscp_ecn: 0x00,
             length: 0x00,
             identifier: 0x00,
             flag_flagment_offset: 0x00,
@@ -81,12 +106,32 @@ impl IpHdr {
             payload: DmaBox::from(empty_slice),
         }
     }
+
+    pub fn is_tcp(&self) -> bool { self.protocol.equals(IpProtocol::Tcp) }
+    pub fn is_udp(&self) -> bool { self.protocol.equals(IpProtocol::Udp) }
+    pub fn is_icmp(&self) -> bool { self.protocol.equals(IpProtocol::Icmp) }
+
+    pub fn parsed_from_buf(buf: DmaBox<[u8]>) -> IpHdr {
+        IpHdr {
+            version_ihl: VersionIhl::parse(buf[0]),
+            dscp_ecn: buf[1],
+            length: (buf[2] as u16) << 8 | buf[3] as u16,
+            identifier: (buf[4] as u16) << 8 | buf[5] as u16,
+            flag_flagment_offset: (buf[6] as u16) << 8 | buf[7] as u16,
+            ttl: buf[8],
+            protocol: IpProtocol::parse(buf[9]),
+            checksum: (buf[10] as u16) << 8 | buf[11] as u16,
+            src_ip_addr: [buf[12], buf[13], buf[14], buf[15]],
+            dst_ip_addr: [buf[16], buf[17], buf[18], buf[19]],
+            payload: DmaBox::from(&buf[20..]),
+        }
+    }
 }
 
 impl IpHdr {
     fn to_slice(&self) -> DmaBox<[u8]> {
         let slice: &[u8] = &[&self.version_ihl.get_u8().to_be_bytes()[..]].concat();
-        let slice: &[u8] = &[&slice[..], &self.escp_ecn.to_be_bytes()].concat();
+        let slice: &[u8] = &[&slice[..], &self.dscp_ecn.to_be_bytes()].concat();
         let slice: &[u8] = &[&slice[..], &self.length.to_be_bytes()].concat();
         let slice: &[u8] = &[&slice[..], &self.identifier.to_be_bytes()].concat();
         let slice: &[u8] = &[&slice[..], &self.flag_flagment_offset.to_be_bytes()].concat();
@@ -96,8 +141,7 @@ impl IpHdr {
         let slice: &[u8] = &[&slice[..], &self.src_ip_addr[..]].concat();
         let slice: &[u8] = &[&slice[..], &self.dst_ip_addr[..]].concat();
         let s: &[u8] = &[&slice[..], &self.payload[..]].concat();
-        // DmaBox::from(s)
-        DmaBox::from_test(s)
+        DmaBox::from(s)
     }
 
     pub fn get_offset(&self) -> bool {
@@ -131,7 +175,7 @@ impl IpHdr {
     pub fn calc_checksum(&mut self) {
         // u8をu16に合わせる際に小さいアドレスの方を8ビット右シフトしているのは、それでビッグエンディアンになるから
         let slice: &[u16] = &[
-            (self.version_ihl as u8 as u16) << 8 | (self.escp_ecn as u16),
+            (self.version_ihl as u8 as u16) << 8 | (self.dscp_ecn as u16),
             self.length,
             self.identifier,
             self.flag_flagment_offset,
@@ -153,11 +197,18 @@ impl IpHdr {
         }
         let slice: &[u16] = &[&slice[..], payload_u16.as_slice()].concat();
         let sum: u32 = slice.iter().fold(0, |acc, &cur| { acc + (cur as u32) });
-        self.checksum = (((0x0000ffff & sum) as u16 + (sum >> 8) as u16) as u16) ^ 0xffff;
+        // self.checksum = (((0x0000ffff & (sum as u32)) as u16 + ((sum as u32) >> 8) as u16) as u16) ^ 0xffff;
+        let bottom = (0x0000ffff & sum) as u16;
+        let upper = (sum >> 16) as u16;
+        self.checksum = (bottom + upper) ^ 0xffff; // バグりそう
     }
 
     pub fn calc_length(&mut self) {
         self.length = (20 + self.payload.len()) as u16;
+    }
+
+    pub fn set_payload(&mut self, buf: DmaBox<[u8]>) {
+        self.payload = buf;
     }
 }
 
@@ -172,7 +223,7 @@ pub fn send_ip_packet(protocol: IpProtocol, dst_ip_addr: &[u8; 4], payload: DmaB
         &mut ip as *mut IpHdr,
         IpHdr {
             version_ihl: VersionIhl::Ip,
-            escp_ecn: 0x00,
+            dscp_ecn: 0x00,
             length: 0x00,
             identifier: 0x00,
             flag_flagment_offset: 0x00,
@@ -197,6 +248,46 @@ pub fn send_ip_packet(protocol: IpProtocol, dst_ip_addr: &[u8; 4], payload: DmaB
         }
     };
     let data = ip.to_slice();
+
+    let len = data.len();
+    send_ethernet_packet(dst_mac_addr, data, len, ETHERNET_TYPE_IP)
+}
+
+pub fn reply_ip_packet(sent_ethernet_header: EthernetHdr, payload: DmaBox<[u8]>) -> Result<(), String> {
+    let sent_ip_header = IpHdr::parsed_from_buf(sent_ethernet_header.get_data());
+    let (_, my_ip_addr) = match arp::get_my_hard_and_ip_addr() {
+        (hardware_addr, Some(ip_addr)) => (hardware_addr, ip_addr),
+        (hardware_addr, None) => (hardware_addr, DEFAULT_MY_IP),
+        _ => (DEFAULT_ETHERNET_ADDRESS, DEFAULT_MY_IP),
+    };
+    if my_ip_addr != sent_ip_header.dst_ip_addr { return Ok(()); }
+
+    let mut reply_ip_header = IpHdr::new();
+    write_mem!(
+        &mut reply_ip_header as *mut IpHdr,
+        IpHdr {
+            version_ihl: sent_ip_header.version_ihl,
+            dscp_ecn: sent_ip_header.dscp_ecn,
+            length: 0x00,
+            identifier: sent_ip_header.identifier,
+            flag_flagment_offset: sent_ip_header.flag_flagment_offset,
+            ttl: sent_ip_header.ttl - 1,
+            protocol: sent_ip_header.protocol,
+            checksum: 0x00,
+            src_ip_addr: my_ip_addr,
+            dst_ip_addr: [sent_ip_header.src_ip_addr[0], sent_ip_header.src_ip_addr[1], sent_ip_header.src_ip_addr[2], sent_ip_header.src_ip_addr[3]],
+            payload,
+        }
+    );
+    reply_ip_header.calc_length();
+    reply_ip_header.calc_checksum();
+
+    let dst_mac_addr = sent_ethernet_header.get_src_mac_addr();
+    let dst_mac_addr = [dst_mac_addr[0], dst_mac_addr[1], dst_mac_addr[2], dst_mac_addr[3], dst_mac_addr[4], dst_mac_addr[5]];
+    let data = reply_ip_header.to_slice();
+    let mut printer = Printer::new(600, 665, 0);
+    write!(printer, "{:?}", "kkkkkkkkk").unwrap();
+
     let len = data.len();
     send_ethernet_packet(dst_mac_addr, data, len, ETHERNET_TYPE_IP)
 }
