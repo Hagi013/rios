@@ -43,8 +43,8 @@ pub fn get_eeprom_data(eeprom_addr: u8) -> i32 {
 
 pub fn get_mac_addr() -> [u8; 6] {
     let eeprom_accessible = get_eeprom_data(0x00);
-    let mut printer = Printer::new(300, 230, 0);
-    write!(printer, "{:?}", eeprom_accessible).unwrap();
+    // let mut printer = Printer::new(300, 230, 0);
+    // write!(printer, "{:?}", eeprom_accessible).unwrap();
 
     if eeprom_accessible >= 0 {
         print_str(300, 300, "EEPROM ACCESSIBLE.", 0);
