@@ -200,7 +200,8 @@ impl IpHdr {
         // self.checksum = (((0x0000ffff & (sum as u32)) as u16 + ((sum as u32) >> 8) as u16) as u16) ^ 0xffff;
         let bottom = (0x0000ffff & sum) as u16;
         let upper = (sum >> 16) as u16;
-        self.checksum = (bottom + upper) ^ 0xffff; // バグりそう
+        let checksum = (bottom as u32 + upper as u32) ^ 0x0000ffff;
+        self.checksum = checksum as u16
     }
 
     pub fn calc_length(&mut self) {
@@ -285,9 +286,6 @@ pub fn reply_ip_packet(sent_ethernet_header: EthernetHdr, payload: DmaBox<[u8]>)
     let dst_mac_addr = sent_ethernet_header.get_src_mac_addr();
     let dst_mac_addr = [dst_mac_addr[0], dst_mac_addr[1], dst_mac_addr[2], dst_mac_addr[3], dst_mac_addr[4], dst_mac_addr[5]];
     let data = reply_ip_header.to_slice();
-    let mut printer = Printer::new(600, 665, 0);
-    write!(printer, "{:?}", "kkkkkkkkk").unwrap();
-
     let len = data.len();
     send_ethernet_packet(dst_mac_addr, data, len, ETHERNET_TYPE_IP)
 }
