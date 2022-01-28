@@ -76,7 +76,7 @@ pub mod exception;
 
 pub mod drivers;
 use drivers::bus::pci;
-use drivers::net::{e1000, arp, ethernet, net_util};
+use drivers::net::{e1000, arp, ethernet, net_util, icmp};
 
 pub mod memory;
 use memory::dma::{
@@ -86,13 +86,16 @@ use memory::dma::{
 
 #[macro_use]
 use memory::volatile::*;
+
 use crate::drivers::net::ethernet::EthernetHdr;
+use crate::drivers::net::ip::IpHdr;
+use crate::drivers::net::icmp::{IcmpHeader, send_icmp, receive_icmp};
 
 fn init_heap() {
     // let heap_start: usize = 0x00e80000;
     // let heap_end: usize = 0x3fff0000;
-    let heap_start: usize = 0x00800000; // 0x00e80000
-    let heap_end: usize = 0x3e970000; // 0x3fff0000;
+    let heap_start: usize = 0x00800000; // 物理アドレスは0x00e80000
+    let heap_end: usize = 0x3e970000; // 物理アドレスは0x3fff0000;
 
     let heap_size: usize = heap_end - heap_start;
     let mut printer = Printer::new(0, 300, 0);
@@ -155,12 +158,16 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
         if frame.len() > 0 {
             let parsed_ethernet_header = EthernetHdr::parse_from_frame(frame);
             if let Some(ethernet_header) = parsed_ethernet_header {
+                let mut printer = Printer::new(600, 470, 0);
+                write!(printer, "{:x}", ethernet_header.get_type()).unwrap();
+
+
                 if ethernet_header.is_arp_type() {
                     for (idx, b) in ethernet_header.get_src_mac_addr().iter().enumerate() {
                         let mut printer = Printer::new((idx * 15) as u32, 60, 0);
                         write!(printer, "{:x}", b).unwrap();
                     }
-                    let parsed_arp = arp::receive_arp_reply(ethernet_header.get_data());
+                    let parsed_arp = arp::receive_arp_packet(ethernet_header.get_data());
                     match parsed_arp {
                         Some(arp) => {
                             for (idx, b) in arp.get_mac_addr().iter().enumerate() {
@@ -170,6 +177,16 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                         },
                         None => {},
                     }
+                }
+                // ipだった場合の処理を書く
+                if ethernet_header.is_ip_type() {
+                    let parsed_ip_header = IpHdr::parsed_from_buf(ethernet_header.get_data());
+                    // icmpだった場合の処理を書く
+                    if parsed_ip_header.is_icmp() {
+                        receive_icmp(ethernet_header);
+                    }
+                    // tcpだった場合
+                    // udpだった場合
                 }
             }
         }
@@ -187,8 +204,12 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                             &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
                             &[192, 168, 56, 102],
                         );
+                    }
+                    if data == 4 {
+                        icmp::send_icmp(&[192, 168, 56, 102]);
+                        // icmp::send_icmp(&[8, 8, 8, 8]);
                     } else {
-                        Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
+                        Graphic::putfont_asc_from_keyboard(idx, 15, 0, data); //
                     }
                 },
                 Err(_) => asmfunc::io_sti(),

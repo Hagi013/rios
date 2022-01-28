@@ -357,7 +357,7 @@ pub fn set_pci_intr_disable() {
     conf_data = conf_data & 0x0000ffff;
     conf_data = conf_data | PCI_COM_INTR_DIS;
     set_pci_conf_reg(NIC_BUS_NUM, NIC_DEV_NUM, NIC_FN_NUM, PCI_CONF_STATUS_COMMAND, conf_data);
-    dump_command_status();
+    // dump_command_status();
 }
 
 pub fn set_bus_master_en() {
@@ -365,7 +365,7 @@ pub fn set_bus_master_en() {
     conf_data = conf_data & 0x0000ffff;
     conf_data = conf_data | PCI_COM_BUS_MASTER_EN;
     set_pci_conf_reg(NIC_BUS_NUM, NIC_DEV_NUM, NIC_FN_NUM, PCI_CONF_STATUS_COMMAND, conf_data);
-    dump_command_status();
+    // dump_command_status();
 }
 
 pub fn dump_bar() {
@@ -648,10 +648,11 @@ pub fn receive_frame() -> Vec<u8> {
     //
     // let mut printer = Printer::new(100, 190, 0);
     // write!(printer, "{:?}", current_rxdesc.recv_buf_addr.desc_base_low).unwrap();
-
-    dump_nic_reg_for_net();
+    // dump_nic_reg_for_net();
 
     if current_rxdesc.status & NIC_RDESC_STAT_DD == NIC_RDESC_STAT_DD {
+        let mut printer = Printer::new(100, 190, 0);
+        write!(printer, "{:?}", current_rxdesc.length).unwrap(); // この時点でICMPは4バイト多くなってる
         for idx in 0..current_rxdesc.length {
             let byte = unsafe { *(current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize) };
             buf.push(byte);

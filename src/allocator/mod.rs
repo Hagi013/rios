@@ -129,7 +129,7 @@ impl Heap {
         } else if layout.size() <= 128 && layout.align() <= 128 {
             HeapAllocator::Slab128Bytes
         } else if layout.size() <= 256 && layout.align() <= 256 {
-            HeapAllocator::Slab128Bytes
+            HeapAllocator::Slab256Bytes
         } else if layout.size() <= 512 && layout.align() <= 512 {
             HeapAllocator::Slab512Bytes
         } else if layout.size() <= 1024 && layout.align() <= 1024 {

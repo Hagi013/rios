@@ -2,9 +2,9 @@ use core::alloc::{ AllocError as AllocErr, Layout };
 use core::ptr::NonNull;
 use core::slice::SliceIndex;
 
-//use super::Graphic;
-//use super::super::Printer;
-//use core::fmt::Write;
+// use super::Graphic;
+// use super::super::Printer;
+// use core::fmt::Write;
 
 pub struct Slab {
     block_size: usize,
