@@ -149,8 +149,6 @@ impl Arp {
         let slice: &[u8] = &[&slice[..], &self.src_protocol_addr[..]].concat();
         let slice: &[u8] = &[&slice[..], &self.dst_hardware_addr[..]].concat();
         let s: &[u8] = &[&slice[..], &self.dst_protocol_addr[..]].concat();
-        let mut printer = Printer::new(100, 560, 0);
-        write!(printer, "{:?}", s.len()).unwrap();
         unsafe {
             DmaBox::from(s)
         }
@@ -208,8 +206,6 @@ pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4])
         dst_protocol_addr: [dst_protocol_addr[0], dst_protocol_addr[1], dst_protocol_addr[2], dst_protocol_addr[3]],
     };
     let v = arp_packet.to_slice();
-    let mut printer = Printer::new(700, 700, 0);
-    write!(printer, "{:x}", v.as_ptr() as *const u8 as u32).unwrap();
     send_ethernet_packet(BROADCAST_MAC_ADDR, v, size_of::<Arp>(), ETHERNET_TYPE_ARP)
 }
 
@@ -252,22 +248,9 @@ pub fn send_reply_arp(arp: Arp) -> Result<(), String> {
         dst_protocol_addr: [arp.src_protocol_addr[0], arp.src_protocol_addr[1], arp.src_protocol_addr[2], arp.src_protocol_addr[3]],
     };
     let v = arp_packet.to_slice();
-    let mut printer = Printer::new(700, 715, 0);
-    write!(printer, "{:x}", v.as_ptr() as *const u8 as u32).unwrap();
     send_ethernet_packet(arp_packet.dst_hardware_addr, v, size_of::<Arp>(), ETHERNET_TYPE_ARP)
 }
 
-// pub fn receive_arp_reply(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {
-//     let parsed_arp = Arp::parse_reply_buf(buf);
-//     if let Some(arp) = parsed_arp {
-//         unsafe {
-//             ARP_TABLE.add(arp.src_protocol_addr, arp.src_hardware_addr);
-//             ARP_TABLE.add(arp.dst_protocol_addr, arp.dst_hardware_addr);
-//             return ARP_TABLE.get_entry_from_ip_addr(&arp.src_protocol_addr);
-//         }
-//     }
-//     None
-// }
 pub fn receive_arp_reply(arp: Arp) -> Option<ArpTableEntry> {
     unsafe {
         ARP_TABLE.add(arp.src_protocol_addr, arp.src_hardware_addr);

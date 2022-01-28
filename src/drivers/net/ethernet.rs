@@ -94,7 +94,5 @@ pub fn send_ethernet_packet(dst_mac_addr: [u8; 6], data: DmaBox<[u8]>, len: usiz
         payload: data,
     };
     let v = ethernet_hdr.to_slice();
-    let mut printer = Printer::new(800, 605, 0);
-    write!(printer, "{:x}", v.as_ptr() as *const u8 as u32).unwrap();
     e1000_send_packet(v)
 }
