@@ -194,8 +194,32 @@ pub fn receive_icmp(parsed_ethernet_header: EthernetHdr) -> Result<(), String> {
             write!(printer, "{:?}", "reply icmp").unwrap();
         },
         IcmpEchoType::EchoReplyMessage => {
+            let replied_message = EchoMessage::parse_from_buf(parsed_ip_header.get_data());
+            let mut printer = Printer::new(600, 605, 0);
+            write!(printer, "{:x}", replied_message.identifier).unwrap();
+            let mut printer = Printer::new(600, 620, 0);
+            write!(printer, "{:x}", replied_message.data.len()).unwrap();
+            let mut printer = Printer::new(600, 635, 0);
+            write!(printer, "{:x}", replied_message.sequence_num).unwrap();
+            let mut printer = Printer::new(600, 650, 0);
+            write!(printer, "{:?}", replied_message.icmp_header.icmp_type as u8).unwrap();
             // identifierとsequence_numberがこちらから送ったものと一致しているかを確認
             // 再度送るのであればidentifierは同じ、sequence_numberはインクリメントする
+            let mut reply_message = EchoMessage {
+                icmp_header: IcmpHeader {
+                    icmp_type: IcmpEchoType::EchoMessage,
+                    icmp_code: 0x00,
+                    checksum: 0x00,
+                },
+                identifier: replied_message.identifier,
+                sequence_num: replied_message.sequence_num + 1,
+                data: replied_message.data,
+            };
+            reply_message.calc_checksum();
+            let payload = reply_message.to_slice();
+            reply_ip_packet(parsed_ethernet_header, payload);
+            let mut printer = Printer::new(600, 665, 0);
+            write!(printer, "{:?}", "received EchoReplyMessage, and replied").unwrap();
         },
         _ => {}
     }
