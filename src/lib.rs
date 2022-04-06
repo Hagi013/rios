@@ -5,14 +5,12 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 #![feature(lang_items, start, asm, const_raw_ptr_deref)]
-#![feature(const_fn)]
+#![feature(const_mut_refs)]
 #![feature(allocator_api)]
 #![feature(alloc_error_handler)]
 #![feature(panic_info_message)]
 #![feature(alloc)]
 #![feature(nonnull_slice_from_raw_parts)]
-#![feature(const_mut_refs)]
-
 
 use core::panic::PanicInfo;
 use core::str;

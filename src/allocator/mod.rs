@@ -1,4 +1,4 @@
-#![feature(const_fn)]
+#![feature(const_mut_refs)]
 
 use core::ops::Deref;
 use core::ptr::NonNull;
