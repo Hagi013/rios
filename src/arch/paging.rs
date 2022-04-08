@@ -298,8 +298,9 @@ where
 
 #[no_mangle]
 pub extern "C" fn page_fault_handler(esp: *const usize) {
-    Graphic::putfont_asc(10, 345, 10, "Page Fault!!");
+    Graphic::putfont_asc(10, 345, 0, "Page Fault!!");
     let vir_address = asmfunc::load_cr2();
+
     {
         if let Some(ref mut table) = *KERNEL_TABLE.lock() {
             table.map(vir_address);
