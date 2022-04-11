@@ -285,3 +285,8 @@ pub fn add_arp_table(ip_addr: &[u8; 4], mac_addr: &[u8; 6]) {
         );
     }
 }
+
+pub fn set_my_ip(ip_addr: &[u8; 4]) {
+    let mac_addr = get_mac_addr();
+    add_arp_table(ip_addr, &mac_addr);
+}
