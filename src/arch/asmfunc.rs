@@ -401,9 +401,7 @@
 // //    }
 // //}
 
-
-
-use core::arch::asm;
+// use core::arch::asm;
 
 pub fn io_hlt() {
     unsafe {
@@ -473,7 +471,8 @@ pub fn io_out8(port: i32, data: u8) {
         // :
         // : "intel");
         in("edx") port,
-        in("al") data, // input
+        in("al") data,
+        options(nomem),
         );
     }
 }
@@ -488,6 +487,7 @@ pub fn io_out32(port: i32, data: u32) {
         // : "intel");
         in("edx") port,
         in("eax") data,
+        options(nomem),
         );
 
     }
@@ -650,6 +650,9 @@ pub fn set_pg_flag() {
         "or eax, 0x80000000",
         "mov cr0, eax",
         "pop eax",
+        "jmp 1f",
+        "1:",
+        "mov eax, eax",
         // :
         // :
         // :
