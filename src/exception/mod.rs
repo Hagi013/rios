@@ -97,7 +97,7 @@ pub extern "C" fn stack_segment_fault_handler(esp: *const usize) {
 #[no_mangle]
 pub extern "C" fn general_protection_error_handler(esp: *const usize) {
     Graphic::putfont_asc(0, 180, 0, "general_protection_error_handler!!!!!");
-    let mut printer = Printer::new(0, 200, 0);
+    let mut printer = Printer::new(0, 400, 0);
     write!(printer, "{:?}", unsafe { esp.offset(11) }).unwrap();
     loop {
         asmfunc::io_hlt();
