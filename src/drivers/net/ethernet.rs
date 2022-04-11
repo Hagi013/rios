@@ -39,6 +39,10 @@ impl EthernetHdr {
         &self.src_mac_addr
     }
 
+    pub fn get_dst_mac_addr(&self) -> &[u8; 6] {
+        &self.dst_mac_addr
+    }
+
     pub fn is_arp_type(&self) -> bool {
         self.ether_type == ETHERNET_TYPE_ARP
     }
