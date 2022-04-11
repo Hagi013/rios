@@ -31,6 +31,3 @@ incremental = true
 overflow-checks = true
 
 [dependencies]
-
-[package.metadata.cargo-xbuild]
-memcpy = true
