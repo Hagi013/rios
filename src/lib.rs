@@ -16,7 +16,7 @@ use core::panic::PanicInfo;
 use core::str;
 use core::fmt;
 use core::alloc::Layout;
-use core::arch::asm;
+// use core::arch::asm; //
 
 #[macro_use]
 use core::fmt::{ Write, Display };
@@ -76,7 +76,7 @@ pub mod exception;
 
 pub mod drivers;
 use drivers::bus::pci;
-use drivers::net::{e1000, arp, ethernet, net_util, icmp};
+use drivers::net::{e1000, arp, ethernet, ip, net_util, icmp, udp, dhcp};
 
 pub mod memory;
 use memory::dma::{
@@ -90,6 +90,7 @@ use memory::volatile::*;
 use crate::drivers::net::ethernet::EthernetHdr;
 use crate::drivers::net::ip::IpHdr;
 use crate::drivers::net::icmp::{IcmpHeader, send_icmp, receive_icmp};
+use crate::drivers::net::udp::receive_udp;
 
 fn init_heap() {
     // let heap_start: usize = 0x00e80000;
@@ -123,9 +124,6 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     // Direct Memory Access用のHeapを取得
     init_dma();
 
-    Graphic::putfont_asc(210, 85, 0, "-1-1-1-1");
-    Graphic::putfont_asc(210, 100, 0, "0000");
-
     let mut window_manager: WindowsManager = WindowsManager::new();
     timer_init();
     Graphic::putfont_asc(210, 175, 0, "rio-os");
@@ -136,6 +134,7 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     let mouse_state = mouse.init_mouse_cursor(14);
 
     let mut mouse_window: *mut Window = window_manager.create_window(mouse_state.1, mouse_state.2, mouse_state.3, mouse_state.4, mouse_state.0).unwrap();
+    // let mut term_window: *mut Window = window_manager.create_window();
 
     pci::dump_vid_did();
     // pci::dump_command_status();
@@ -144,7 +143,6 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     // pci::set_pci_intr_disable();
     pci::set_bus_master_en();
     pci::nic_init();
-    // pci::tx_init();
     // pci::dump_nic_ims();
 
     let mut idx: u32 = 10;
@@ -160,7 +158,6 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
             if let Some(ethernet_header) = parsed_ethernet_header {
                 let mut printer = Printer::new(600, 470, 0);
                 write!(printer, "{:x}", ethernet_header.get_type()).unwrap();
-
 
                 if ethernet_header.is_arp_type() {
                     for (idx, b) in ethernet_header.get_src_mac_addr().iter().enumerate() {
@@ -182,11 +179,16 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                 if ethernet_header.is_ip_type() {
                     let parsed_ip_header = IpHdr::parsed_from_buf(ethernet_header.get_data());
                     // icmpだった場合の処理を書く
-                    if parsed_ip_header.is_icmp() {
-                        receive_icmp(ethernet_header);
+                    if (&parsed_ip_header).is_icmp() {
+                        let res = receive_icmp(ethernet_header);
+                    } else if (&parsed_ip_header).is_tcp() { // tcpだった場合
+                        let mut printer = Printer::new(600, 300, 0);
+                        write!(printer, "{:?}", "Received TCP Packet!!!!").unwrap();
+                    } else if (&parsed_ip_header).is_udp() { // udpだった場合
+                        let mut printer = Printer::new(600, 315, 0);
+                        write!(printer, "{:?}", "Received UDP Packet!!!!").unwrap();
+                        let res = receive_udp(ethernet_header);
                     }
-                    // tcpだった場合
-                    // udpだった場合
                 }
             }
         }
@@ -200,17 +202,20 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                 Ok(data) => {
                     asmfunc::io_sti();
                     if data == 3 {
-                        arp::send_arp_packet(
+                        let res = arp::send_arp_packet(
                             &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
-                            &[192, 168, 56, 102],
+                            &[192, 168, 56, 101],
                         );
                     }
                     if data == 4 {
-                        icmp::send_icmp(&[192, 168, 56, 102]);
+                        let res = send_icmp(&[192, 168, 56, 101]);
                         // icmp::send_icmp(&[8, 8, 8, 8]);
-                    } else {
-                        Graphic::putfont_asc_from_keyboard(idx, 15, 0, data); //
                     }
+                    if data == 5 {
+                        let res = dhcp::request_discover();
+                        // dhcp::test_dhcp_send();
+                    }
+                    Graphic::putfont_asc_from_keyboard(idx, 15, 0, data); //
                 },
                 Err(_) => asmfunc::io_sti(),
             };
@@ -253,7 +258,7 @@ pub extern "C" fn eh_personality() {}
 #[panic_handler]
 #[no_mangle]
 pub extern "C" fn panic(_info: &PanicInfo) -> ! {
-    Graphic::putfont_asc(0, 100, 10, "panic!!!!!");
+    Graphic::putfont_asc(0, 100, 0, "panic!!!!!");
     let mut printer = Printer::new(0, 120, 0);
     write!(printer, "{:?}", _info.location().unwrap().file()).unwrap();
     let mut printer = Printer::new(0, 140, 0);

@@ -14,7 +14,9 @@ use core::fmt::Write;
 
 use crate::arch::asmfunc::jmp_stop;
 
-pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 103];
+// pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 103];
+pub const DEFAULT_MY_IP: [u8; 4] = [0, 0, 0, 0];
+pub static mut MY_IP: [u8; 4] = [0, 0, 0, 0];
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -51,17 +53,17 @@ impl VersionIhl {
 
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum IpProtocol {
-    Icmp = 0x01,
-    Tcp = 0x06,
-    Udp = 0x07,
+    Icmp = 1,
+    Tcp = 6,
+    Udp = 17,
 }
 
 impl IpProtocol {
     fn equals(&self, other: IpProtocol) -> bool {
         match self {
-            other => true,
+            &other => true,
             _ => false,
         }
     }
@@ -107,9 +109,17 @@ impl IpHdr {
         }
     }
 
-    pub fn is_tcp(&self) -> bool { self.protocol.equals(IpProtocol::Tcp) }
-    pub fn is_udp(&self) -> bool { self.protocol.equals(IpProtocol::Udp) }
-    pub fn is_icmp(&self) -> bool { self.protocol.equals(IpProtocol::Icmp) }
+    pub fn get_src_ip_addr(&self) -> [u8; 4] {
+        [self.src_ip_addr[0], self.src_ip_addr[1], self.src_ip_addr[2], self.src_ip_addr[3]]
+    }
+    pub fn get_dst_ip_addr(&self) -> [u8; 4] {
+        [self.dst_ip_addr[0], self.dst_ip_addr[1], self.dst_ip_addr[2], self.dst_ip_addr[3]]
+    }
+
+    pub fn get_type(&self) -> &IpProtocol { &self.protocol }
+    pub fn is_tcp(&self) -> bool { self.protocol == IpProtocol::Tcp }
+    pub fn is_udp(&self) -> bool { self.protocol == IpProtocol::Udp }
+    pub fn is_icmp(&self) -> bool { self.protocol == IpProtocol::Icmp }
 
     pub fn parsed_from_buf(buf: DmaBox<[u8]>) -> IpHdr {
         IpHdr {
@@ -126,9 +136,7 @@ impl IpHdr {
             payload: DmaBox::from(&buf[20..]),
         }
     }
-}
 
-impl IpHdr {
     fn to_slice(&self) -> DmaBox<[u8]> {
         let slice: &[u8] = &[&self.version_ihl.get_u8().to_be_bytes()[..]].concat();
         let slice: &[u8] = &[&slice[..], &self.dscp_ecn.to_be_bytes()].concat();
@@ -186,18 +194,7 @@ impl IpHdr {
             (self.dst_ip_addr[0] as u16) << 8 | (self.dst_ip_addr[1] as u16),
             (self.dst_ip_addr[2] as u16) << 8 | (self.dst_ip_addr[3] as u16),
         ];
-        let mut payload_u16: Vec<u16> = vec![];
-        for idx in 0..self.payload.len() / 2 + 1 {
-            if idx * 2 >= self.payload.len() { continue; }
-            if idx * 2 + 1 >= self.payload.len() {
-                payload_u16.push((self.payload[idx * 2] as u16) << 8);
-                continue;
-            }
-            payload_u16.push((self.payload[idx * 2] as u16) << 8 | (self.payload[idx * 2 + 1] as u16));
-        }
-        let slice: &[u16] = &[&slice[..], payload_u16.as_slice()].concat();
         let sum: u32 = slice.iter().fold(0, |acc, &cur| { acc + (cur as u32) });
-        // self.checksum = (((0x0000ffff & (sum as u32)) as u16 + ((sum as u32) >> 8) as u16) as u16) ^ 0xffff;
         let bottom = (0x0000ffff & sum) as u16;
         let upper = (sum >> 16) as u16;
         let checksum = (bottom as u32 + upper as u32) ^ 0x0000ffff;
@@ -216,8 +213,10 @@ impl IpHdr {
 pub fn send_ip_packet(protocol: IpProtocol, dst_ip_addr: &[u8; 4], payload: DmaBox<[u8]>) -> Result<(), String> {
     let (_, my_ip_addr) = match arp::get_my_hard_and_ip_addr() {
         (hardware_addr, Some(ip_addr)) => (hardware_addr, ip_addr),
-        (hardware_addr, None) => (hardware_addr, DEFAULT_MY_IP),
-        _ => (DEFAULT_ETHERNET_ADDRESS, DEFAULT_MY_IP),
+        // (hardware_addr, None) => (hardware_addr, DEFAULT_MY_IP),
+        (hardware_addr, None) => (hardware_addr, unsafe { MY_IP }),
+        // _ => (DEFAULT_ETHERNET_ADDRESS, DEFAULT_MY_IP),
+        _ => (DEFAULT_ETHERNET_ADDRESS, unsafe { MY_IP }),
     };
     let mut ip = IpHdr::new();
     write_mem!(
@@ -254,38 +253,92 @@ pub fn send_ip_packet(protocol: IpProtocol, dst_ip_addr: &[u8; 4], payload: DmaB
     send_ethernet_packet(dst_mac_addr, data, len, ETHERNET_TYPE_IP)
 }
 
-pub fn reply_ip_packet(sent_ethernet_header: EthernetHdr, payload: DmaBox<[u8]>) -> Result<(), String> {
-    let sent_ip_header = IpHdr::parsed_from_buf(sent_ethernet_header.get_data());
+pub fn reply_ip_packet(received_ethernet_header: EthernetHdr, payload: DmaBox<[u8]>) -> Result<(), String> {
+    let received_ip_header = IpHdr::parsed_from_buf(received_ethernet_header.get_data());
     let (_, my_ip_addr) = match arp::get_my_hard_and_ip_addr() {
         (hardware_addr, Some(ip_addr)) => (hardware_addr, ip_addr),
-        (hardware_addr, None) => (hardware_addr, DEFAULT_MY_IP),
-        _ => (DEFAULT_ETHERNET_ADDRESS, DEFAULT_MY_IP),
+        // (hardware_addr, None) => (hardware_addr, DEFAULT_MY_IP),
+        // _ => (DEFAULT_ETHERNET_ADDRESS, DEFAULT_MY_IP),
+        (hardware_addr, None) => (hardware_addr, unsafe { MY_IP }),
+        _ => (DEFAULT_ETHERNET_ADDRESS, unsafe { MY_IP }),
     };
-    if my_ip_addr != sent_ip_header.dst_ip_addr { return Ok(()); }
+    if my_ip_addr != received_ip_header.dst_ip_addr { return Ok(()); }
 
     let mut reply_ip_header = IpHdr::new();
     write_mem!(
         &mut reply_ip_header as *mut IpHdr,
         IpHdr {
-            version_ihl: sent_ip_header.version_ihl,
-            dscp_ecn: sent_ip_header.dscp_ecn,
+            version_ihl: received_ip_header.version_ihl,
+            dscp_ecn: received_ip_header.dscp_ecn,
             length: 0x00,
-            identifier: sent_ip_header.identifier,
-            flag_flagment_offset: sent_ip_header.flag_flagment_offset,
-            ttl: sent_ip_header.ttl - 1,
-            protocol: sent_ip_header.protocol,
+            identifier: received_ip_header.identifier,
+            flag_flagment_offset: received_ip_header.flag_flagment_offset,
+            ttl: received_ip_header.ttl - 1,
+            protocol: received_ip_header.protocol,
             checksum: 0x00,
             src_ip_addr: my_ip_addr,
-            dst_ip_addr: [sent_ip_header.src_ip_addr[0], sent_ip_header.src_ip_addr[1], sent_ip_header.src_ip_addr[2], sent_ip_header.src_ip_addr[3]],
+            dst_ip_addr: [received_ip_header.src_ip_addr[0], received_ip_header.src_ip_addr[1], received_ip_header.src_ip_addr[2], received_ip_header.src_ip_addr[3]],
             payload,
         }
     );
     reply_ip_header.calc_length();
     reply_ip_header.calc_checksum();
 
-    let dst_mac_addr = sent_ethernet_header.get_src_mac_addr();
+    let dst_mac_addr = received_ethernet_header.get_src_mac_addr();
     let dst_mac_addr = [dst_mac_addr[0], dst_mac_addr[1], dst_mac_addr[2], dst_mac_addr[3], dst_mac_addr[4], dst_mac_addr[5]];
     let data = reply_ip_header.to_slice();
     let len = data.len();
     send_ethernet_packet(dst_mac_addr, data, len, ETHERNET_TYPE_IP)
+}
+
+// ToDo integrate with reply_ip_packet
+pub fn reply_ip_packet_with_no_check_from_ip(received_ethernet_header: EthernetHdr, payload: DmaBox<[u8]>) -> Result<(), String> {
+    let received_ip_header = IpHdr::parsed_from_buf(received_ethernet_header.get_data());
+    let (_, my_ip_addr) = match arp::get_my_hard_and_ip_addr() {
+        (hardware_addr, Some(ip_addr)) => (hardware_addr, ip_addr),
+        (hardware_addr, None) => (hardware_addr, unsafe { MY_IP }),
+        _ => (DEFAULT_ETHERNET_ADDRESS, unsafe { MY_IP }),
+    };
+
+    let mut reply_ip_header = IpHdr::new();
+    write_mem!(
+        &mut reply_ip_header as *mut IpHdr,
+        IpHdr {
+            version_ihl: received_ip_header.version_ihl,
+            dscp_ecn: received_ip_header.dscp_ecn,
+            length: 0x00,
+            identifier: received_ip_header.identifier,
+            flag_flagment_offset: received_ip_header.flag_flagment_offset,
+            ttl: received_ip_header.ttl - 1,
+            protocol: received_ip_header.protocol,
+            checksum: 0x00,
+            src_ip_addr: my_ip_addr,
+            dst_ip_addr: [received_ip_header.src_ip_addr[0], received_ip_header.src_ip_addr[1], received_ip_header.src_ip_addr[2], received_ip_header.src_ip_addr[3]],
+            payload,
+        }
+    );
+    reply_ip_header.calc_length();
+    reply_ip_header.calc_checksum();
+
+    let dst_mac_addr = received_ethernet_header.get_src_mac_addr();
+    let dst_mac_addr = [dst_mac_addr[0], dst_mac_addr[1], dst_mac_addr[2], dst_mac_addr[3], dst_mac_addr[4], dst_mac_addr[5]];
+    let data = reply_ip_header.to_slice();
+    let len = data.len();
+    send_ethernet_packet(dst_mac_addr, data, len, ETHERNET_TYPE_IP)
+}
+
+pub fn get_my_ip() -> [u8; 4] {
+    unsafe {
+        [MY_IP[0], MY_IP[1], MY_IP[2], MY_IP[3]]
+    }
+}
+
+pub fn set_my_ip(ip: &[u8; 4]) {
+    unsafe {
+        write_mem!(
+            &mut MY_IP,
+            [ip[0], ip[1], ip[2], ip[3]]
+        );
+        arp::set_my_ip(ip);
+    }
 }
