@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use super::e1000::get_mac_addr;
 use super::ethernet::{ETHERNET_TYPE_ARP, ETHERNET_TYPE_IP, HARDWARE_TYPE_ETHERNET, EthernetHdr, send_ethernet_packet};
 use super::net_util::{switch_endian16, switch_endian32, any_as_u8_vec, any_as_u8_slice, push_to_vec};
-use super::ip::DEFAULT_MY_IP;
+use super::ip::MY_IP;
 
 use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
@@ -184,7 +184,7 @@ impl Arp {
 pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4]) -> Result<(), String> {
     let src_mac_addr: [u8; 6] = get_mac_addr();
     // let src_protocol_addr: [u8; 4] = [10, 0, 2, 14];
-    let src_protocol_addr: [u8; 4] = DEFAULT_MY_IP;
+    let src_protocol_addr: [u8; 4] = unsafe { MY_IP };
     let hardware_addr_len: u8 = 6;
     let protocol_addr_len: u8 = 4;
     let arp_opcode = ArpType::ArpRequest; // 1
@@ -215,7 +215,7 @@ pub fn receive_arp_packet(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {
         match arp.opcode {
             ArpType::ArpReply => receive_arp_reply(arp),
             ArpType::ArpRequest => {
-                send_reply_arp(arp);
+                let res = send_reply_arp(arp);
                 None
             },
         }
@@ -226,10 +226,10 @@ pub fn receive_arp_packet(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {
 
 pub fn send_reply_arp(arp: Arp) -> Result<(), String> {
     // 自分のIPじゃなかったらそのまま終了
-    if arp.dst_protocol_addr != DEFAULT_MY_IP { return Ok(()); }
+    if arp.dst_protocol_addr != unsafe { MY_IP } { return Ok(()); }
 
     let src_mac_addr: [u8; 6] = get_mac_addr();
-    let src_protocol_addr: [u8; 4] = DEFAULT_MY_IP;
+    let src_protocol_addr: [u8; 4] = unsafe { MY_IP };
     let hardware_addr_len: u8 = 6;
     let protocol_addr_len: u8 = 4;
     let arp_opcode = ArpType::ArpReply; // 1
