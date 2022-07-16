@@ -213,7 +213,6 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                     }
                     if data == 5 {
                         let res = dhcp::request_discover();
-                        // dhcp::test_dhcp_send();
                     }
                     Graphic::putfont_asc_from_keyboard(idx, 15, 0, data); //
                 },
