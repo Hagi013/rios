@@ -209,12 +209,11 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                     }
                     if data == 4 {
                         let res = send_icmp(&[192, 168, 56, 101]);
-                        // icmp::send_icmp(&[8, 8, 8, 8]);
                     }
                     if data == 5 {
                         let res = dhcp::request_discover();
                     }
-                    Graphic::putfont_asc_from_keyboard(idx, 15, 0, data); //
+                    Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
                 },
                 Err(_) => asmfunc::io_sti(),
             };
