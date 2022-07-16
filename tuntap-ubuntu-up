@@ -4,15 +4,45 @@ TAPDEV="tap0"
 BRIDGEDEV="br0"
 ETHDEV="enp0s3"
 
+iptables -I FORWARD -m physdev --physdev-is-bridged -j ACCEPT
+# iptables -A OUTPUT -p udp  -o eth0 --dport 67 --sport 1024:65535 -j ACCEPT
+rm -rf /etc/sysctl.d/10-disable-firewall-on-bridge.conf
+echo '
+net.bridge.bridge-nf-call-ip6tables = 0
+net.bridge.bridge-nf-call-iptables = 0
+net.bridge.bridge-nf-call-arptables = 0
+' > /etc/sysctl.d/10-disable-firewall-on-bridge.conf
+sysctl -p /etc/sysctl.d/10-disable-firewall-on-bridge.conf
+sysctl net.ipv4.ip_forward=1
+
 # [ref](https://gist.github.com/extremecoders-re/e8fd8a67a515fee0c873dcafc81d811c)
 brctl addbr ${BRIDGEDEV}
 ip addr flush dev ${ETHDEV}
 brctl addif ${BRIDGEDEV} ${ETHDEV}
 tunctl -t ${TAPDEV} -u `whoami`
 brctl addif ${BRIDGEDEV} ${TAPDEV}
+ip link set ${TAPDEV} master ${BRIDGEDEV}
+
+ip link set ${ETHDEV} ${BRIDGEDEV}
+ip address delete 192.168.56.101/24 dev ${ETHDEV}
+ip address add 192.168.56.101/24 dev ${BRIDGEDEV}
+ip route add default via 192.168.56.0/24 dev ${BRIDGEDEV}
+
 ip link set ${TAPDEV} promisc on
 ifconfig ${ETHDEV} up
 ifconfig ${TAPDEV} up
 ifconfig ${BRIDGEDEV} up
 brctl show
-dhclient -v ${BRIDGEDEV}
+
+iptables -A FORWARD -i ${TAPDEV} -o eth0 -j ACCEPT
+iptables -A FORWARD -i ${ETHDEV} -o ${TAPDEV} -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -t nat -A POSTROUTING -o ${ETHDEV} -j MASQUERADE
+
+# dhclient -v ${BRIDGEDEV}
+# dhclient -v enp0s3
+ip link set ${BRIDGEDEV} up
+ip addr add 192.168.56.101/24 broadcast 192.168.56.255 label ${BRIDGEDEV} dev ${BRIDGEDEV}
+
+systemctl stop NetworkManager
+#dnsmasq --log-dhcp  --interface=br0 --bind-interfaces --dhcp-range=192.168.56.3,192.168.255.254 --dhcp-option=3,192.168.168.254 --listen-address=127.0.0.1 --dhcp-range=192.168.56.2,192.168.56.254
+systemctl start isc-dhcp-server
