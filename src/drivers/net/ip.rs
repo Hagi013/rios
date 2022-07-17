@@ -16,7 +16,7 @@ use crate::arch::asmfunc::jmp_stop;
 
 // pub const DEFAULT_MY_IP: [u8; 4] = [192, 168, 56, 103];
 pub const DEFAULT_MY_IP: [u8; 4] = [0, 0, 0, 0];
-pub static mut MY_IP: [u8; 4] = [0, 0, 0, 0];
+pub static mut MY_IP: [u8; 4] = DEFAULT_MY_IP;
 
 #[repr(u8)]
 #[derive(Clone, Copy)]

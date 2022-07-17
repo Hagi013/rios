@@ -206,6 +206,14 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                             &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
                             &[192, 168, 56, 101],
                         );
+                        match res {
+                            Err(msg) => {
+                                if msg == "MY_IP is not initialized." {
+                                    let r = dhcp::request_discover();
+                                }
+                            },
+                            _ => {},
+                        }
                     }
                     if data == 4 {
                         let res = send_icmp(&[192, 168, 56, 101]);

@@ -1,12 +1,13 @@
 #![feature(allocator_api)]
 
+use alloc::borrow::ToOwned;
 use core::mem::size_of;
 use alloc::string::String;
 use alloc::vec::Vec;
 use super::e1000::get_mac_addr;
 use super::ethernet::{ETHERNET_TYPE_ARP, ETHERNET_TYPE_IP, HARDWARE_TYPE_ETHERNET, EthernetHdr, send_ethernet_packet};
 use super::net_util::{switch_endian16, switch_endian32, any_as_u8_vec, any_as_u8_slice, push_to_vec};
-use super::ip::MY_IP;
+use super::ip::{MY_IP, DEFAULT_MY_IP};
 
 use crate::arch::graphic::{Graphic, Printer, print_str};
 use core::fmt::Write;
@@ -183,7 +184,7 @@ impl Arp {
 
 pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4]) -> Result<(), String> {
     let src_mac_addr: [u8; 6] = get_mac_addr();
-    // let src_protocol_addr: [u8; 4] = [10, 0, 2, 14];
+    if unsafe { MY_IP } == DEFAULT_MY_IP { return Err("MY_IP is not initialized.".to_owned()); }
     let src_protocol_addr: [u8; 4] = unsafe { MY_IP };
     let hardware_addr_len: u8 = 6;
     let protocol_addr_len: u8 = 4;
@@ -205,8 +206,8 @@ pub fn send_arp_packet(dst_hardware_addr: &[u8; 6], dst_protocol_addr: &[u8; 4])
         dst_hardware_addr: [dst_hardware_addr[0], dst_hardware_addr[1], dst_hardware_addr[2], dst_hardware_addr[3], dst_hardware_addr[4], dst_hardware_addr[5]],
         dst_protocol_addr: [dst_protocol_addr[0], dst_protocol_addr[1], dst_protocol_addr[2], dst_protocol_addr[3]],
     };
-    let v = arp_packet.to_slice();
-    send_ethernet_packet(BROADCAST_MAC_ADDR, v, size_of::<Arp>(), ETHERNET_TYPE_ARP)
+    let sliced = arp_packet.to_slice();
+    send_ethernet_packet(BROADCAST_MAC_ADDR, sliced, size_of::<Arp>(), ETHERNET_TYPE_ARP)
 }
 
 pub fn receive_arp_packet(buf: DmaBox<[u8]>) -> Option<ArpTableEntry> {

@@ -217,6 +217,10 @@ impl MouseGraphic {
     }
 }
 
+pub struct TerminalGraphic {
+    buf: Cell<[u8; 256]>
+}
+
 
 enum RGB {
     Black,          /*  0:黒 */
