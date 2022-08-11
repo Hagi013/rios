@@ -128,7 +128,8 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     timer_init();
     Graphic::putfont_asc(210, 175, 0, "rio-os");
     keyboard::allow_pic1_keyboard_int();
-    mouse::allow_mouse_init();
+    // mouse::allow_mouse_init();
+
 
     let mouse: MouseGraphic = MouseGraphic::new();
     let mouse_state = mouse.init_mouse_cursor(14);
