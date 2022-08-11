@@ -15,6 +15,8 @@ use super::pic::KBC_MODE;
 
 use super::pic::wait_kbc_sendready;
 
+use crate::memory::volatile::read_mem;
+
 use super::super::queue::SimpleQueue;
 use alloc::borrow::ToOwned;
 
@@ -59,7 +61,7 @@ pub fn is_existing() -> bool {
     unsafe {
         // ここはread_volatileにしないとなぜか副作用のある処理をこの中で記述しないと実行されない
         // 参考: https://doc.rust-lang.org/std/ptr/fn.read_volatile.html
-        match ptr::read_volatile(&KEYBOARD_QUEUE) {
+        match read_mem!(&KEYBOARD_QUEUE) {
             Some(checker) => checker.is_existing(),
             None => false,
         }
@@ -68,8 +70,8 @@ pub fn is_existing() -> bool {
 
 pub fn get_data() -> Result<i32, ()> {
     unsafe {
-        if let Some(mut queue) = ptr::read(&KEYBOARD_QUEUE) {
-//        if let Some(mut queue) = ptr::read_volatile(&KEYBOARD_QUEUE) {
+        if let Some(mut queue) = read_mem!(&KEYBOARD_QUEUE) {
+       // if let Some(mut queue) = ptr::read_volatile(&KEYBOARD_QUEUE) {
             let data: i32 = queue.dequeue().ok_or(())?;
             KEYBOARD_QUEUE = Some(queue);
             Ok(data)
