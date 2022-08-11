@@ -4,6 +4,7 @@ TARGET_DIR := ./target
 TARGET_ARCH_i686 := i686-unknown-linux-gnu
 BUILD_NAME := rios-$(TARGET_ARCH_i686)
 QEMU_ARCH_i686 := i386
+QEMU_PATH ?= /Users/haaagiii/Personal/qemu-arm2/qemu/build
 
 BUILD_MODE=debug
 #BUILD_MODE=release
@@ -14,6 +15,8 @@ DEBUG_MODE := -D ./qemu.log
 QEMUNET = -netdev type=tap,id=net0,ifname=tap0,script=./tuntap-up,downscript=./tuntap-down \
 		  -device e1000,netdev=net0 \
 		  -object filter-dump,id=f1,netdev=net0,file=dump.dat
+
+TRACE=-trace enable=true
 
 
 asm:	$(BUILD_DIR)/ipl.bin \
@@ -58,14 +61,19 @@ qemu:
 # 	sudo /Users/hagi/Personal/qemu-v5.1.0/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
 #	sudo /opt/local/bin/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
 
-	sudo /Users/hagi/Personal/qemu/build/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+	sudo $(QEMU_PATH)/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
 		-rtc base=localtime \
 		-vga std \
+		-M smm=off \
+		-d trace:ps2_keyboard_event,trace:ps2_kbd_init,trace:ps2_mouse_send_packet \
 		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
 		-monitor stdio \
-		$(QEMUNET) \
 		$(DEBUG) \
-		$(DEBUG_MODE)
+		$(DEBUG_MODE) \
+		$(TRACE)
+#		-d trace:pic_set_irq,trace:pic_interrupt,trace:ps2_keyboard_event \
+#		-d trace:ps2_keyboard_event,int \
+#		$(QEMUNET) \
 		# -boot n \
 		# -device vmxnet3,netdev=net0 \
 
@@ -129,4 +137,5 @@ test:
 	cd ${KERNEL_DIR}; set RUST_BACKTRACE=1; `which cargo` xtest
 
 dump: ./target/i686-unknown-linux-gnu/debug/librios.a
-	gobjdump -d -S -M intel ./target/i686-unknown-linux-gnu/debug/librios.a > rios.obj
+	# gobjdump -d -S -M intel ./target/i686-unknown-linux-gnu/debug/librios.a > rios.obj
+	objdump -d -S -M intel ./target/i686-unknown-linux-gnu/debug/librios.a > rios.obj
