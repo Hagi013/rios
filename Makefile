@@ -42,7 +42,7 @@ $(BUILD_DIR)/secondboot.bin: $(KERNEL_DIR)/boot
 
 #kernel
 $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/librios.a: ./$(KERNEL_DIR)/$(TARGET_ARCH_i686).json Cargo.toml $(KERNEL_DIR)/*.rs
-	cd ${KERNEL_DIR}; RUST_TARGET_PATH=$(PWD); set RUST_BACKTRACE=1;cargo build -v
+	cd ${KERNEL_DIR}; RUST_TARGET_PATH=$(PWD); set RUST_BACKTRACE=1;rustup run nightly `which cargo` xbuild --target $(TARGET_ARCH_i686).json -v
 
 $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/%.o: $(KERNEL_DIR)/boot
 	nasm -f elf32 $(KERNEL_DIR)/boot/asmfunc.asm -o $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.o -l $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.lst
@@ -70,6 +70,8 @@ qemu:
 		-monitor stdio \
 		$(DEBUG) \
 		$(DEBUG_MODE) \
+		-device e1000,netdev=net0 -netdev user,id=net0 \
+		-object filter-dump,id=f1,netdev=net0,file=dump.dat \
 		$(TRACE)
 #		-d trace:pic_set_irq,trace:pic_interrupt,trace:ps2_keyboard_event \
 #		-d trace:ps2_keyboard_event,int \
@@ -136,6 +138,6 @@ od:
 test:
 	cd ${KERNEL_DIR}; set RUST_BACKTRACE=1; `which cargo` xtest
 
-dump: ./target/i686-unknown-linux-gnu/debug/librios.a
-	# gobjdump -d -S -M intel ./target/i686-unknown-linux-gnu/debug/librios.a > rios.obj
+dump: target2
+	# gobjdump -d -S -M intel ./target2/i686-unknown-linux-gnu/debug/librios.a > rios.obj
 	objdump -d -S -M intel ./target/i686-unknown-linux-gnu/debug/librios.a > rios.obj
