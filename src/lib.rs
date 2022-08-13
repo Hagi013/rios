@@ -205,7 +205,7 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                     if data == 3 {
                         let res = arp::send_arp_packet(
                             &[0x0, 0x0, 0x0, 0x0, 0x0, 0x0],
-                            &[192, 168, 56, 101],
+                            &[10, 0, 2, 2],
                         );
                         match res {
                             Err(msg) => {
@@ -217,7 +217,7 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                         }
                     }
                     if data == 4 {
-                        let res = send_icmp(&[192, 168, 56, 101]);
+                        let res = send_icmp(&[10, 0, 2, 2]);
                     }
                     if data == 5 {
                         let res = dhcp::request_discover();
