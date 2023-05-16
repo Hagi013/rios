@@ -1,0 +1,165 @@
+# sytax=docker/dockerfile:1.2.1-experimental
+FROM ubuntu:20.04
+
+ARG USERNAME=osdev
+
+ENV DEBIAN_FRONTEND noninteractive
+# install development tools
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    build-essential \
+    llvm-7-dev \
+    lld-7 \
+    clang-7 \
+    nasm \
+    mtools \
+    acpica-tools \
+    uuid-dev \
+    qemu-system-x86 \
+    qemu-utils \
+    xauth \
+    unzip \
+    # added
+    qemu-system-gui \
+    dosfstools \
+    git \
+    python3-distutils \
+    # for arm64 cross-compile
+    libc6-dev-amd64-cross \
+    binutils-x86-64-linux-gnu \
+    ca-certificates \
+    openssl \
+    pkg-config \
+    libssl-dev \
+ && apt-get clean -y \
+ && rm -rf /var/lib/apt/lists
+
+# set alternatives
+RUN for item in \
+        llvm-PerfectShuffle \
+        llvm-ar \
+        llvm-as \
+        llvm-bcanalyzer \
+        llvm-cat \
+        llvm-cfi-verify \
+        llvm-config \
+        llvm-cov \
+        llvm-c-test \
+        llvm-cvtres \
+        llvm-cxxdump \
+        llvm-cxxfilt \
+        llvm-diff \
+        llvm-dis \
+        llvm-dlltool \
+        llvm-dwarfdump \
+        llvm-dwp \
+        llvm-exegesis \
+        llvm-extract \
+        llvm-lib \
+        llvm-link \
+        llvm-lto \
+        llvm-lto2 \
+        llvm-mc \
+        llvm-mca \
+        llvm-modextract \
+        llvm-mt \
+        llvm-nm \
+        llvm-objcopy \
+        llvm-objdump \
+        llvm-opt-report \
+        llvm-pdbutil \
+        llvm-profdata \
+        llvm-ranlib \
+        llvm-rc \
+        llvm-readelf \
+        llvm-readobj \
+        llvm-rtdyld \
+        llvm-size \
+        llvm-split \
+        llvm-stress \
+        llvm-strings \
+        llvm-strip \
+        llvm-symbolizer \
+        llvm-tblgen \
+        llvm-undname \
+        llvm-xray \
+        ld.lld \
+        lld-link \
+        clang \
+        clang++ \
+        clang-cpp \
+    ; do \
+        update-alternatives --install "/usr/bin/${item}" "${item}" "/usr/bin/${item}-7" 50 \
+    ; done
+
+
+RUN apt-get update \
+    && apt-get install -y curl
+
+# switch to unprivileged
+RUN adduser ${USERNAME}
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
+
+# build EDK II
+RUN --mount=type=secret,id=ssh,target=~/.ssh/github git clone --recursive https://github.com/tianocore/edk2.git edk2
+RUN cd edk2 && git checkout --recurse-submodules 38c8be123aced4cc8ad5c7e0da9121a181b94251
+RUN make -C edk2/BaseTools/Source/C
+
+# clone mikanos devenv
+# RUN git clone https://github.com/uchan-nos/mikanos-build.git osbook
+
+# download standard libraries
+# RUN curl -L https://github.com/uchan-nos/mikanos-build/releases/download/v2.0/x86_64-elf.tar.gz \
+#   | tar xzvf - -C osbook/devenv
+RUN mkdir /home/${USERNAME}/osdev
+COPY . /home/${USERNAME}/osdev
+
+# rustupのinstall
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+RUN cd /home/${USERNAME}/osdev/src && echo '. $HOME/.cargo/env' >> ~/.bashrc \
+    && . $HOME/.cargo/env \
+    && rustup install nightly \
+    && rustup target add i686-unknown-linux-gnu \
+    && rustup default nightly
+RUN . $HOME/.cargo/env \
+    && cargo install cargo-edit cargo-xbuild
+
+# switch back to root
+USER root
+
+
+# for cross compiler toolchain
+# this is so confusing for user...
+RUN for item in \
+        addr2line \
+        ar \
+        as \
+        c++filt \
+        dwp \
+        elfedit \
+        gprof \
+        ld \
+        ld.bfd \
+        ld.gold \
+        nm \
+        objcopy \
+        objdump \
+        ranlib \
+        readelf \
+        size \
+        strings \
+        strip \
+    ; do \
+        update-alternatives --install "/usr/bin/${item}" "${item}" "/usr/bin/x86_64-linux-gnu-${item}" 50 \
+    ; done
+
+
+# add ~/osbook/devenv to PATH
+ENV PATH="/home/${USERNAME}/osdev/devenv:${PATH}"
+
+# set X11 server address
+ENV DISPLAY=host.docker.internal:0
+
+# override startup command, taken from VSCode Devcontainer logs
+CMD ["/bin/sh", "-c", "echo Container started ; trap \"exit 0\" 15; while sleep 1 & wait $!; do :; done"]
