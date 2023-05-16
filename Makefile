@@ -4,7 +4,7 @@ TARGET_DIR := ./target
 TARGET_ARCH_i686 := i686-unknown-linux-gnu
 BUILD_NAME := rios-$(TARGET_ARCH_i686)
 QEMU_ARCH_i686 := i386
-QEMU_PATH ?= /Users/haaagiii/Personal/qemu-arm2/qemu/build
+QEMU_PATH ?= /Users/haaagiii/Personal/qemu-arm2/qemu/build2
 
 BUILD_MODE=debug
 #BUILD_MODE=release
@@ -42,7 +42,7 @@ $(BUILD_DIR)/secondboot.bin: $(KERNEL_DIR)/boot
 
 #kernel
 $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/librios.a: ./$(KERNEL_DIR)/$(TARGET_ARCH_i686).json Cargo.toml $(KERNEL_DIR)/*.rs
-	cd ${KERNEL_DIR}; RUST_TARGET_PATH=$(PWD); set RUST_BACKTRACE=1;rustup run nightly `which cargo` xbuild --target $(TARGET_ARCH_i686).json -v
+	 cd ${KERNEL_DIR}; RUST_TARGET_PATH=$(PWD); set RUST_BACKTRACE=1;rustup run nightly `which cargo` xbuild --target $(TARGET_ARCH_i686).json -v
 
 $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/%.o: $(KERNEL_DIR)/boot
 	nasm -f elf32 $(KERNEL_DIR)/boot/asmfunc.asm -o $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.o -l $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.lst
@@ -65,19 +65,35 @@ qemu:
 		-rtc base=localtime \
 		-vga std \
 		-M smm=off \
-		-d trace:ps2_keyboard_event,trace:ps2_kbd_init,trace:ps2_mouse_send_packet \
+		-d trace:ps2_keyboard_event,trace:ps2_kbd_init,trace:ps2_mouse_send_packet,trace:e1000e_tx_disabled,trace:e1000e_tx_descr,trace:e1000e_ring_free_space,trace:e1000e_rx_can_recv_rings_full,trace:e1000e_rx_can_recv,trace:e1000e_rx_receive_iov,trace:e1000e_irq_msi_notify,trace:e1000e_irq_legacy_notify \
 		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
 		-monitor stdio \
 		$(DEBUG) \
 		$(DEBUG_MODE) \
-		-device e1000,netdev=net0 -netdev user,id=net0 \
-		-object filter-dump,id=f1,netdev=net0,file=dump.dat \
+		-device e1000,netdev=net0 -netdev user,id=net0,hostfwd=udp::60022-:22,hostfwd=tcp::5900-:5900 \
+		-object filter-dump,id=f1,netdev=net0,file=dump.pcap \
+		-device qemu-xhci -device usb-mouse \
+		-msg timestamp=on \
 		$(TRACE)
 #		-d trace:pic_set_irq,trace:pic_interrupt,trace:ps2_keyboard_event \
 #		-d trace:ps2_keyboard_event,int \
 #		$(QEMUNET) \
 		# -boot n \
 		# -device vmxnet3,netdev=net0 \
+
+qemu-d:
+	qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+		-rtc base=localtime \
+		-vga std \
+		-M smm=off \
+		-d trace:ps2_keyboard_event,trace:ps2_kbd_init,trace:ps2_mouse_send_packet \
+		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
+		-monitor stdio \
+		$(DEBUG) \
+		$(DEBUG_MODE) \
+		-device e1000,netdev=net0 -netdev user,id=net0,hostfwd=udp::60022-:22,hostfwd=tcp::5900-:5900 \
+		-device qemu-xhci -device usb-mouse \
+		$(TRACE)
 
 qemu2:
 	sudo /Users/hagi/Personal/qemu/build/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
@@ -138,6 +154,12 @@ od:
 test:
 	cd ${KERNEL_DIR}; set RUST_BACKTRACE=1; `which cargo` xtest
 
-dump: target2
+build/arm:
+	DOCKER_BUILDKIT=1 docker build -f ./Dockerfile.arm --progress=plain . --ssh default -t osdev:latest
+
+up:
+	docker run --privileged --rm --user osdev --mount type=bind,source=`pwd`,target=/home/osdev/workspace -p 9001:9001 -it osdev /bin/bash
+
+dump: ./target
 	# gobjdump -d -S -M intel ./target2/i686-unknown-linux-gnu/debug/librios.a > rios.obj
 	objdump -d -S -M intel ./target/i686-unknown-linux-gnu/debug/librios.a > rios.obj
