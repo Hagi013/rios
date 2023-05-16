@@ -38,7 +38,7 @@ use arch::asmfunc;
 use arch::dsctbl::DscTbl;
 use arch::keyboard;
 use arch::mouse;
-use arch::timer::{ timer_init, get_uptime };
+use arch::timer::{timer_init, get_uptime};
 use arch::paging::{PageTableImpl, init_paging, set_kernel_table_allocator};
 use arch::pic;
 
@@ -76,7 +76,9 @@ pub mod exception;
 
 pub mod drivers;
 use drivers::bus::pci;
+use drivers::bus::pci::Device;
 use drivers::net::{e1000, arp, ethernet, ip, net_util, icmp, udp, dhcp};
+use drivers::usb::xhci;
 
 pub mod memory;
 use memory::dma::{
@@ -145,7 +147,15 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     pci::set_bus_master_en();
     pci::nic_init();
     // pci::dump_nic_ims();
-
+    pci::scan_all_bus();
+    // let base_addr_opt = pci::search_xhc_base_addr();
+    // if base_addr_opt.is_some() {
+    //     let base_addr = base_addr_opt.unwrap();
+    //     let mut printer = Printer::new(300, 385, 0);
+    //     write!(printer, "{:x}", base_addr).unwrap();
+    //     xhci::initialize_xhci(base_addr);
+    // }
+    xhci::initialize_xhci();
     let mut idx: u32 = 10;
 
     loop {
@@ -223,6 +233,11 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
                         let res = dhcp::request_discover();
                     }
                     Graphic::putfont_asc_from_keyboard(idx, 15, 0, data);
+                    if data == 6 {
+                        let mut printer = Printer::new(600, 315, 0);
+                        write!(printer, "{:?}", "Send Test.").unwrap();
+                        pci::send_test_frame();
+                    }
                 },
                 Err(_) => asmfunc::io_sti(),
             };
