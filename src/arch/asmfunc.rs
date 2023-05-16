@@ -401,7 +401,7 @@
 // //    }
 // //}
 
-// use core::arch::asm;
+use core::arch::asm;
 
 pub fn io_hlt() {
     unsafe {
