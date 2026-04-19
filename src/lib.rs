@@ -97,8 +97,9 @@ use crate::drivers::net::udp::receive_udp;
 fn init_heap() {
     // let heap_start: usize = 0x00e80000;
     // let heap_end: usize = 0x3fff0000;
-    let heap_start: usize = 0x00800000; // 物理アドレスは0x00e80000
-    let heap_end: usize = 0x3e970000; // 物理アドレスは0x3fff0000;
+    // let heap_start: usize = 0x00800000; // 物理アドレスは0x00e80000
+    let heap_start: usize = 0x00c00000; // 物理アドレスは0x00e80000
+    let heap_end: usize = 0x3fd70000; // 物理アドレスは0x3fff0000;
 
     let heap_size: usize = heap_end - heap_start;
     let mut printer = Printer::new(0, 300, 0);
