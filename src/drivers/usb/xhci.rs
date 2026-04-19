@@ -488,7 +488,6 @@ pub fn initialize_xhci() -> Result<(), ()> {
                 // write!(printer, "{:x}", &mut device_array as *mut _ as u32).unwrap();
             }
         }
-        loop {}
     }
     return Err(())
 }
