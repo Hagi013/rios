@@ -11,22 +11,19 @@ VBEMODE equ     0x105             ; 1024 x 768 x 8bitカラー
 ; 0x105 :   1024 x 768 x 8bitカラー
 ; 0x107 :   1200 x 1024 x 8bitカラー
 
-INITOS  equ     0x00280000      ; OS本体部分のロード先
-;STACK   equ     0x00480000      ; Stack領域
-;STACK   equ     0x0057ffff      ; Stack領域
-;STACK   equ     0x00300000      ; Stack領域
-STACK  equ      0x003fffff      ; Stack領域
-;STACK   equ     0x00310000      ; Stack領域
-DSKCAC  equ     0x00100000      ; ディスクキャッシュの場所
-DSKCAC0 equ     0x00008000      ; ディスクキャッシュの場所(リアルモード)
+INITOS  equ     0x00280000          ; OS本体部分のロード先（2.5MB位置から）
+STACK   equ     0x007ffff0            ; Stack領域（8MB位置）
+; DSKCAC  equ     0x00100000      ; ディスクキャッシュの場所
+; DSKCAC0 equ     0x00008000      ; ディスクキャッシュの場所(リアルモード)
 
 ; BOOT_INFO関係
-CYLS    equ     0x0ff0          ; ブートセクタが設定する
+; CYLS    equ     0x0ff0          ; ブートセクタが設定する
 LEDS    equ     0x0ff1
 VMODE   equ     0x0ff2          ; 色すうに関する情報。何ビットカラーか?
 SCRNX   equ     0x0ff4          ; 解像度のX
 SCRNY   equ     0x0ff6          ; 解像度のY
 VRAM    equ     0x0ff8          ; グラフィックバッファの開始番地
+; CYL     equ     0x4a            ; シリンダー4aまで読み込む
 
         org     0xc200          ; このプログラムがどこに読み込まれるのか
 
@@ -87,6 +84,79 @@ scrn320:
         mov     WORD [SCRNY], 200
         mov     DWORD [VRAM], 0x000a0000
 
+
+; resetdisk:
+;         mov     ah, 0x00
+;         mov     dl, 0x00        ; Aドライブ
+;         int     0x13            ; ドライブのリセット, やはりタイムアウトが発生する
+;
+; loaddisk:; 再度ディスクを読む
+;         ; mov     ebx, 0x9c800    ; iplで0x9c800まで読み込んでいるのでこれが開始位置
+;         mov     ax, 0          ; 初期化
+;         ; mov     ax, 0x9c80
+;         mov     ax, 0x0820
+;         mov     es, ax
+;         mov     bx, 0x0000      ; BXレジスタ（オフセット）を0にリセット
+;         ; mov     ch, 0x22        ; iplで21まで読み込んでいるのでシリンダ22から
+;         mov     ch, 0x0        ; テスト用
+;         mov     dh, 0           ; ヘッド0
+;         ; mov     cl, 1           ; セクタ1から
+;         mov     cl, 2           ; テスト用
+; readloop:
+;         mov     si, 0           ; 失敗回数を数えるレジスタ
+; retry:
+;         mov     ah, 0x02        ; AH=0x2 : ディスク読み込み
+;         mov     al, 1           ; 1セクタ
+;         mov     bx, 0           ; プロテクトモード移行後であればbxの初期化は多分いらないが
+;         mov     dl, 0x00        ; Aドライブ
+;         int     0x13            ; ディスクBIOS呼び出し <= ここで変になる
+;         jnc     next            ; エラーが起きなければnextへ
+;         add     si, 1           ; siに1を足す
+;         cmp     si, 5           ; siと5を比較
+;         jae     derror           ; si >= 5 だったらerrorへ
+;         mov     ah, 0x00
+;         mov     dl, 0x00        ; Aドライブ
+;         int     0x13            ; ドライブのリセット
+;         jmp     retry
+; next:
+;         mov     ax, es          ; アドレスを0x200進める
+;         add     ax, 0x0020
+;         mov     es, ax          ; add ex, 0x0020という命令がないのでこうしている
+;         add     cl, 1           ; clに1を足す
+;         cmp     cl, 18          ; clと18を比較
+;         jbe     readloop        ; cl <= 18 だったらreadloopへ
+;         mov     cl, 1
+;         add     dh, 1
+;         cmp     dh, 2
+;         jb      readloop        ; dh < 2 だったらreadloopへ
+;         mov     dh, 0
+;         add     ch, 1
+;         ; cmp     ch, CYL
+;         cmp     ch, 2           ; テスト用
+;         jb      readloop        ; ch < CYL だったらreadloopへ
+;         jmp     $
+;         jmp     keystatus
+;
+; derror:
+;         mov     si, msg2
+; putloop2:
+;         mov     al, [si]
+;         add     si, 1           ; siに1を足す
+;         cmp     al, 0
+;         je      fin2
+;         mov     ah, 0x0e        ; 一文字表示ファンクション
+;         mov     bx, 15          ; カラーコード
+;         int     0x10            ; ビデオBIOSの呼び出し
+;         jmp     putloop2
+; fin2:
+;         hlt                     ; 何かあるまでCPUを停止させる
+;         jmp     fin2
+; msg2:
+;         db      0x0a, 0x0a      ; 改行を2つ
+;         db      "load error"
+;         db      0x0a            ; 改行
+;         db      0
+
 ; キーボードのLED状態をBIOSに教えてもらう
 
 keystatus:
@@ -98,7 +168,6 @@ keystatus:
 ;   AT互換機の使用では、PICの初期化をするなら、
 ;   こいつをCLI前にやっておかないと、たまにハングアップする
 ;   PICの初期化は後でやる
-
         mov     al, 0xff
         out     0x21, al
         nop                         ; out命令を連続させるとうまくいかない機種があるらしいので
@@ -106,8 +175,19 @@ keystatus:
 
         cli                         ; さらにCPUレベルでも割り込み禁止
 
-; CPUから1MB以上のメモリにアクセスできるように、A20GATEを設定
+; CPUから1MB以上のメモリにアクセスできるように、A20GATEを設定 ToDo あとでコメントアウト消す
 
+        ; call    waitkbdout
+        ; mov     al, 0xd1
+        ; out     0x64, al
+        ; call    waitkbdout
+        ; mov     al, 0xdf            ; enable A20
+        ; out     0x60, al
+        ; call    waitkbdout
+        ; jmp     resetdisk
+
+; CPUから1MB以上のメモリにアクセスできるように、A20GATEを設定 後でこのsectionは消す
+enablea20:
         call    waitkbdout
         mov     al, 0xd1
         out     0x64, al
@@ -115,9 +195,10 @@ keystatus:
         mov     al, 0xdf            ; enable A20
         out     0x60, al
         call    waitkbdout
+        jmp     moveprotect
 
 ; プロテクトモードへの移行
-
+moveprotect:
         LGDT    [GDTR0]             ; 暫定のGDTを設定
         mov     eax, cr0
         and     eax, 0x7fffffff     ; bit31を0にする(ページング禁止のため)
@@ -134,33 +215,32 @@ pipelineflush:
         mov     gs, ax
         mov     ss, ax
 
-; OS本体の転送
 
+; OS本体の転送
+copyos:
         mov     esi, init_os         ; 転送元
         mov     edi, INITOS         ; 転送先
-        mov     ecx, 512*1024/4     ; 512KB
-;        mov     ecx, 2048*1024/4    ; 2MB
-;        jmp     $
+        mov     ecx, 4*1024*1024/4    ; 4MB
         call    memcpy
 
 ; ついでにディスクデータも本来の位置へ転送
 
 ; 先ずはブートセクタから
 
-        mov     esi, 0x7c00         ; 転送元
-        mov     edi, DSKCAC         ; 転送先
-        mov     ecx, 512/4
-        call    memcpy
+;         mov     esi, 0x7c00         ; 転送元
+;         mov     edi, DSKCAC         ; 転送先
+;         mov     ecx, 512/4
+;         call    memcpy
 
 ; 残り全部
 
-        mov     esi, DSKCAC0+512    ; 転送元
-        mov     edi, DSKCAC+512     ; 転送先
-        mov     ecx, 0
-        mov     cl, BYTE [CYLS]
-        imul    ecx, 512*18*2/4     ; シリンダ数からバイト数/4に変換
-        sub     ecx, 512/4          ; IPLの分だけ差し引く
-        call    memcpy
+;         mov     esi, DSKCAC0+512    ; 転送元
+;         mov     edi, DSKCAC+512     ; 転送先
+;         mov     ecx, 0
+;         mov     cl, BYTE [CYLS]
+;         imul    ecx, 512*18*2/4     ; シリンダ数からバイト数/4に変換
+;         sub     ecx, 512/4          ; IPLの分だけ差し引く
+;         call    memcpy
 
 ; asmheadでしなければいけないことは全部出し終わったので
 ;   後はinitosに任せる
