@@ -10,7 +10,7 @@ crate-type = ["staticlib"]
 
 [profile.dev]
 panic = "abort"
-opt-level = 'z'
+opt-level = 3
 debug = true
 lto = true
 

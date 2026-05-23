@@ -22,16 +22,16 @@ TRACE=-trace enable=true
 asm:	$(BUILD_DIR)/ipl.bin \
  	$(BUILD_DIR)/secondboot.bin
 
-# make image file
+# sector 0 = ipl.bin, sector 1+ = secondboot + kernel (.sys), raw blob (no FS)
 $(BUILD_DIR)/$(BUILD_NAME).img: $(BUILD_DIR)/ipl.bin $(BUILD_DIR)/$(BUILD_NAME).sys Makefile
-	mformat -f 1440 -C -B $(BUILD_DIR)/ipl.bin -i $(BUILD_DIR)/$(BUILD_NAME).img ::
-	mcopy -i $(BUILD_DIR)/$(BUILD_NAME).img $(BUILD_DIR)/$(BUILD_NAME).sys ::
+	dd if=/dev/zero of=$(BUILD_DIR)/$(BUILD_NAME).img bs=1M count=8 && \
+	dd conv=notrunc if=$(BUILD_DIR)/ipl.bin of=$(BUILD_DIR)/$(BUILD_NAME).img bs=512 count=1 seek=0 && \
+	dd conv=notrunc if=$(BUILD_DIR)/$(BUILD_NAME).sys of=$(BUILD_DIR)/$(BUILD_NAME).img bs=512 seek=1
 
 $(BUILD_DIR)/$(BUILD_NAME).sys: $(BUILD_DIR)/kernel.bin $(BUILD_DIR)/secondboot.bin
 	cat $(BUILD_DIR)/secondboot.bin $(BUILD_DIR)/kernel.bin > $(BUILD_DIR)/$(BUILD_NAME).sys
 
 $(BUILD_DIR)/kernel.bin: $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/librios.a $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/asmfunc.o $(KERNEL_DIR)/boot
-#	$(TARGET_ARCH_i686)-ld --print-gc-sections --gc-sections -t -nostdlib -Tdata=0x00310000 -T $(KERNEL_DIR)/boot/kernel.ld -o $(BUILD_DIR)/kernel.bin $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/asmfunc.o --library-path=$(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE) -lrios -Map $(BUILD_DIR)/kernel.map --verbose
 	$(TARGET_ARCH_i686)-ld -nostdlib -T $(KERNEL_DIR)/boot/kernel.ld -o $(BUILD_DIR)/kernel.bin $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/asmfunc.o --library-path=$(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE) -lrios -Map $(BUILD_DIR)/kernel.map --verbose
 
 $(BUILD_DIR)/ipl.bin: $(KERNEL_DIR)/boot
@@ -42,12 +42,12 @@ $(BUILD_DIR)/secondboot.bin: $(KERNEL_DIR)/boot
 
 #kernel
 $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/librios.a: ./$(KERNEL_DIR)/$(TARGET_ARCH_i686).json Cargo.toml $(KERNEL_DIR)/*.rs
-	 cd ${KERNEL_DIR}; RUST_TARGET_PATH=$(PWD); set RUST_BACKTRACE=1;rustup run nightly `which cargo` xbuild --target $(TARGET_ARCH_i686).json -v
+	cd ${KERNEL_DIR}; RUST_TARGET_PATH=$(PWD); set RUST_BACKTRACE=1;`which cargo` xbuild --target $(TARGET_ARCH_i686).json -v
 
 $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/%.o: $(KERNEL_DIR)/boot
 	nasm -f elf32 $(KERNEL_DIR)/boot/asmfunc.asm -o $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.o -l $(TARGET_DIR)/$(TARGET_ARCH_i686)/$(BUILD_MODE)/$*.lst
 
-qemu:
+qemu:	$(BUILD_DIR)/$(BUILD_NAME).img
 #	sudo qemu-system-$(QEMU_ARCH_i686) -m 4096 \
 #		-rtc base=localtime \
 #		-vga std \
@@ -66,7 +66,7 @@ qemu:
 		-vga std \
 		-M smm=off \
 		-d trace:ps2_keyboard_event,trace:ps2_kbd_init,trace:ps2_mouse_send_packet,trace:e1000e_tx_disabled,trace:e1000e_tx_descr,trace:e1000e_ring_free_space,trace:e1000e_rx_can_recv_rings_full,trace:e1000e_rx_can_recv,trace:e1000e_rx_receive_iov,trace:e1000e_irq_msi_notify,trace:e1000e_irq_legacy_notify \
-		-fda $(BUILD_DIR)/$(BUILD_NAME).img \
+		-drive file=$(BUILD_DIR)/$(BUILD_NAME).img,format=raw,if=ide \
 		-monitor stdio \
 		$(DEBUG) \
 		$(DEBUG_MODE) \
@@ -80,6 +80,21 @@ qemu:
 #		$(QEMUNET) \
 		# -boot n \
 		# -device vmxnet3,netdev=net0 \
+
+qemu-with-usb:
+	sudo $(QEMU_PATH)/qemu-system-$(QEMU_ARCH_i686) -m 4096 \
+		-rtc base=localtime \
+		-vga std \
+		-M smm=off \
+		-d trace:ps2_keyboard_event,trace:ps2_kbd_init,trace:ps2_mouse_send_packet,trace:e1000e_tx_disabled,trace:e1000e_tx_descr,trace:e1000e_ring_free_space,trace:e1000e_rx_can_recv_rings_full,trace:e1000e_rx_can_recv,trace:e1000e_rx_receive_iov,trace:e1000e_irq_msi_notify,trace:e1000e_irq_legacy_notify \
+		-drive file=$(BUILD_DIR)/$(BUILD_NAME).img,format=raw,if=ide \
+		-monitor stdio \
+		$(DEBUG) \
+		$(DEBUG_MODE) \
+		-device e1000,netdev=net0 -netdev user,id=net0,hostfwd=udp::60022-:22,hostfwd=tcp::5900-:5900 \
+		-object filter-dump,id=f1,netdev=net0,file=dump.pcap \
+		-device qemu-xhci -device usb-mouse \
+		-msg timestamp=on
 
 qemu-d:
 	qemu-system-$(QEMU_ARCH_i686) -m 4096 \
@@ -146,7 +161,6 @@ clean:
 	rm -rf $(BUILD_DIR)/*
 	rm -rf ./target
 	cd $(KERNEL_DIR) && cargo clean
-	cd $(KERNEL_DIR) && xargo clean
 
 od:
 	od $(BUILD_DIR)/$(BUILD_NAME).img -t x1z -A x
@@ -155,11 +169,10 @@ test:
 	cd ${KERNEL_DIR}; set RUST_BACKTRACE=1; `which cargo` xtest
 
 build/arm:
-	DOCKER_BUILDKIT=1 docker build -f ./Dockerfile.arm --progress=plain . --ssh default -t osdev:latest
-
-up:
-	docker run --privileged --rm --user osdev --mount type=bind,source=`pwd`,target=/home/osdev/workspace -p 9001:9001 -it osdev /bin/bash
 
 dump: ./target
 	# gobjdump -d -S -M intel ./target2/i686-unknown-linux-gnu/debug/librios.a > rios.obj
 	objdump -d -S -M intel ./target/i686-unknown-linux-gnu/debug/librios.a > rios.obj
+
+elf: ./target
+	greadelf -l ./target/i686-unknown-linux-gnu/debug/librios.a > rios-elf.txt

@@ -1,7 +1,13 @@
 ; rio-ipl
 ; TAB=4
 
-cyls    equ     0x0a             ; どこまで読み込むか
+; cyls    equ     0x0a             ; どこまで読み込むか
+; 読み込み設定
+; SECTORS_TO_READ    equ    4260             ; 全体で読み込むセクタ数 (≒ 2.1MB)
+SECTORS_TO_READ    equ    889             ; 全体で読み込むセクタ数。一時的に縮小。
+SECTORS_PER_CALL    equ    127              ; 1回のint 0x13で読み込むセクタ数 (127以下にすること)
+LOAD_SEG                  equ    0xc20         ; ロード先 segment (-> 物理 0xc200)
+START_LBA                 equ    1                  ; 開始 LBA (IPL 直後のセクタ)
 
         org     0x7c00           ; このプログラムがどこに読み込まれるか
 
@@ -36,49 +42,44 @@ entry:
         mov     ss, ax
         mov     sp, 0x7c00
         mov     ds, ax
+        mov     [boot_drive], dl    ; BIOS から渡されたブートドライブ番号を保存
 
 ; ディスクを読む
+; DAP の初期固定値（転送先と開始 LBA。読むセクタ数だけループ内で更新）
+        mov     word   [dap_buf_off], 0
+        mov     word   [dap_buf_seg], LOAD_SEG
+        mov     dword [dap_lba_lo], START_LBA
+        mov     dword [dap_lba_hi], 0
+        mov     word [total_remain], SECTORS_TO_READ
 
-        mov     ax, 0x0820
-        mov     es, ax
-        mov     ch, 0           ; シリンダ0
-        mov     dh, 0           ; ヘッド0
-        mov     cl, 2           ; セクタ2
-readloop:
-        mov     si, 0           ; 失敗回数を数えるレジスタ
-retry:
-        mov     ah, 0x02        ; AH=0x20 : ディスク読み込み
-        mov     al, 1           ; 1セクタ
-        mov     bx, 0
-        mov     dl, 0x00        ; Aドライブ
-        int     0x13            ; ディスクBIOS呼び出し
-        jnc     next            ; エラーが起きなければnextへ
-        add     si, 1           ; siに1を足す
-        cmp     si, 5           ; siと5を比較
-        jae     error           ; si >= 5 だったらerrorへ
-        mov     ah, 0x00
-        mov     dl, 0x00        ; Aドライブ
-        int     0x13            ; ドライブのリセット
-        jmp     retry
-next:
-        mov     ax, es          ; アドレスを0x200進める
-        add     ax, 0x0020
-        mov     es, ax          ; add ex, 0x0020という命令がないのでこうしている
-        add     cl, 1           ; clに1を足す
-        cmp     cl, 18          ; clと18を比較
-        jbe     readloop        ; cl <= 18 だったらreadloopへ
-        mov     cl, 1
-        add     dh, 1
-        cmp     dh, 2
-        jb      readloop        ; dh < 2 だったらreadloopへ
-        mov     dh, 0
-        add     ch, 1
-        cmp     ch, cyls
-        jb      readloop        ; ch < cyls だったらreadloopへ
+read_loop:
+        mov     ax, [total_remain]
+        cmp     ax, 0
+        je         read_done
 
-; 読み終わったのでプログラムを実行する
+        ; 今回読むセクタ数 = min(残り, SECTORS_PER_CALL)
+        cmp     ax, SECTORS_PER_CALL
+        jbe       .set_count
+        mov     ax, SECTORS_PER_CALL
+.set_count:
+        mov     [dap_sectors], ax
 
-        mov     [0x0ff0], ch    ; IPLがどこまで読んだのかをメモ
+        ; INT 13h AH=42h 呼び出し
+        mov     ah, 0x42
+        mov     dl, [boot_drive]
+        mov     si, dap
+        int        0x13
+        jc         error         ; エラーが起きたらerrorへ
+
+        ; ポインタ・LBA・残りを進める
+        movzx   eax, word [dap_sectors]   ; 実際に読んだセクタ数 (32bit に zero-extend)
+        sub       [total_remain], ax             ; 残り -= 読んだ分
+        add       [dap_lba_lo], eax             ; LBA += 読んだ分
+        shl        ax, 5                                ; ax *= 32 (1 sector = 0x20 segments)
+        add       [dap_buf_seg], ax             ; 転送先セグメント += 読んだ分(segment += sectors * 0x20)
+        jmp       read_loop
+
+read_done:
         jmp     0xc200
 
 error:
@@ -97,12 +98,31 @@ fin:
         jmp     fin
 msg:
         db      0x0a, 0x0a      ; 改行を2つ
-        db      "load error"
+        db      "LBA load error"
         db      0x0a            ; 改行
         db      0
 
         ; resb    0x7dfe-$      ; 0x7dfe(32254)まで0x00で埋める
         ; resb    32254           ; 0x7dfe(32254)まで0x00で埋める
+; ----- データ領域 -----
+        align   4
+dap:
+        db      0x10               ; +0  DAP size (= 0x10)
+        db      0                     ; +1  reserved
+dap_sectors:
+        dw      0                     ; +2  読むセクタ数 (DAP呼び出し前にここをセットする)
+dap_buf_off:
+        dw      0                     ; +4  転送先オフセット
+dap_buf_seg:
+        dw      0                     ; +6  転送先セグメント
+dap_lba_lo:
+        dd      0                     ; +8  読み込み開始 LBA (下位)
+dap_lba_hi:
+        dd      0                     ; +12 読み込み開始 LBA (上位
+
+total_remain dw    0          ; 読み込むセクタの残り数
+boot_drive    db    0         ; ブートドライブ番号を保存する変数
+
         times   0x7dfe-0x7c00-($-$$) db 0
 
         db      0x55, 0xaa
