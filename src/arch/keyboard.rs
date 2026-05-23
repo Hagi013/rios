@@ -43,7 +43,7 @@ pub extern "C" fn inthandler21(esp: *const u32) {
     if data >= 0x80 { return; }
 
     unsafe {
-        match ptr::read(&KEYBOARD_QUEUE) {
+        match read_mem!(&KEYBOARD_QUEUE) {
             Some(mut queue) => {
                 queue.enqueue(data);
                 KEYBOARD_QUEUE = Some(queue);
