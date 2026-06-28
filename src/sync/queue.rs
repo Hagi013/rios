@@ -82,7 +82,11 @@ where
             head: INITIAL_INDEX,
             tail: INITIAL_INDEX,
             count: 0,
-            queue: [unsafe { *(0 as *mut T) }; LIMIT],
+            // ヌルポインタ参照(`*(0 as *mut T)`)は未定義動作。opt-level=3 では
+            // LLVM がこのパスを到達不能とみなし、new() の呼び出し元(キュー初期化)ごと
+            // 最適化で消されてしまい、キーボード/マウスのキューが機能しなくなる。
+            // 書き込み前のスロットは読まれないが、健全性のためゼロ初期化する。
+            queue: unsafe { core::mem::MaybeUninit::<[T; LIMIT]>::zeroed().assume_init() },
         }
     }
 
@@ -259,7 +263,8 @@ where
     }
 
     pub fn clear(&mut self) {
-        self.queue = [unsafe { *(0 as *mut T) }; LIMIT];
+        // new() と同じ理由でヌルポインタ参照を避ける。
+        self.queue = unsafe { core::mem::MaybeUninit::<[T; LIMIT]>::zeroed().assume_init() };
         self.head = INITIAL_INDEX;
         self.tail = INITIAL_INDEX;
         self.count = 0;
