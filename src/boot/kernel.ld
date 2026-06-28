@@ -27,6 +27,7 @@ SECTIONS
     /* AT(LOADADDR(.text) + SIZEOF(.text)) SUBALIGN(4) */
     data : {
         *(.data)
+        *(.data*)
         *(.rodata*)
     }
 
