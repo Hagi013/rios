@@ -246,12 +246,15 @@ pub fn get_nic_reg(reg: u16) -> u32 {
     // let mut pointer = unsafe { *(&mut base_addr as *mut u32).offset(0 as isize) as *mut u32 as u32 };
     // let mut printer = Printer::new(900, 305, 0);
     // write!(printer, "{:?}", unsafe { *(*&mut pointer as *mut u32) as *mut u32 }).unwrap(); // 0xffef3 => 0xfebc0000
-    unsafe { *(*&mut (base_addr + reg as u32) as *mut u32) }
+
+    // unsafe { *(*&mut (base_addr + reg as u32) as *mut u32) }
+    unsafe { read_mem!((*&mut (base_addr + reg as u32) as *mut u32)) }
 }
 
 pub fn set_nic_reg(reg: u16, val: u32) {
     let mut base_addr = get_nic_reg_base();
-    unsafe { *(*&mut (base_addr + reg as u32) as *mut u32) = val };
+    // unsafe { *(*&mut (base_addr + reg as u32) as *mut u32) = val };
+    unsafe { write_mem!((*&mut (base_addr + reg as u32) as *mut u32), val) };
 }
 
 pub fn dump_vid_did() {
@@ -878,7 +881,8 @@ pub fn receive_frame() -> Vec<u8> {
         let mut printer = Printer::new(100, 190, 0);
         write!(printer, "{:?}", current_rxdesc.length).unwrap(); // この時点でICMPは4バイト多くなってる
         for idx in 0..current_rxdesc.length {
-            let byte = unsafe { *(current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize) };
+            // let byte = unsafe { *(current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize) };
+            let byte = unsafe { read_mem!((current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize)) };
             buf.push(byte);
         }
         // current_rxdesc.status = 0;
@@ -984,12 +988,17 @@ pub fn send_test_frame() -> u8 {
 
     unsafe {
         let current_idx = unsafe { *CURRENT_TX_IDX.lock() };
-        TX_DESC_DATA.data[current_idx].sta_rsv = 0;
-        let mut d = DmaBox::from(buf);
-        TX_DESC_DATA.data[current_idx].tx_buf_address.desc_base_low = d.as_mut_ptr() as u32;
-        TX_DESC_DATA.data[current_idx].length = buf.len() as u16;
+        // TX_DESC_DATA.data[current_idx].sta_rsv = 0;
+        // let mut d = DmaBox::from(buf);
+        // TX_DESC_DATA.data[current_idx].tx_buf_address.desc_base_low = d.as_mut_ptr() as u32;
+        // TX_DESC_DATA.data[current_idx].length = buf.len() as u16;
 
-        let idx = { (*CURRENT_TX_IDX.lock()).clone() };
+        write_mem!(&mut TX_DESC_DATA.data[current_idx].sta_rsv as *mut u8, 0);
+        let mut d = DmaBox::from(buf);
+        write_mem!(&mut TX_DESC_DATA.data[current_idx].tx_buf_address.desc_base_low as *mut u32, d.as_mut_ptr() as u32);
+        write_mem!(&mut TX_DESC_DATA.data[current_idx].length as *mut u16, buf.len() as u16);
+
+        let idx = (*CURRENT_TX_IDX.lock()).clone();
         *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
 
         set_nic_reg(NIC_REG_TDT, unsafe { *CURRENT_TX_IDX.lock() as u32 });
