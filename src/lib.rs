@@ -153,10 +153,8 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     // if base_addr_opt.is_some() {
     //     let base_addr = base_addr_opt.unwrap();
     //     let mut printer = Printer::new(300, 385, 0);
-    //     write!(printer, "{:x}", base_addr).unwrap();
-    //     xhci::initialize_xhci(base_addr);
     // }
-    xhci::initialize_xhci();
+    // xhci::initialize_xhci();
     let mut idx: u32 = 10;
 
     loop {
