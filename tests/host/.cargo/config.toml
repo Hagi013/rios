@@ -1,0 +1,7 @@
+# リポジトリルートの .cargo/config.toml がカーネル用のカスタムターゲット
+# (src/i686-unknown-linux-gnu.json) を強制するため、このクレートでは
+# ホストターゲットに戻す。x86_64 以外のホストでは
+# `cargo test --target $(rustc -vV | awk '/^host/{print $2}')`
+# のように明示的に上書きする (Makefile の test-host はそうしている)。
+[build]
+target = "x86_64-unknown-linux-gnu"

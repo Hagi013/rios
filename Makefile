@@ -168,6 +168,11 @@ od:
 test:
 	cd ${KERNEL_DIR}; set RUST_BACKTRACE=1; `which cargo` xtest
 
+# ホスト(std)環境で動くリグレッションテスト (tests/host 参照)。
+# nightly ツールチェインや QEMU なしで stable Rust だけで実行できる。
+test-host:
+	cd tests/host; RUST_BACKTRACE=1 `which cargo` test --target `rustc -vV | awk '/^host/{print $$2}'`
+
 build/arm:
 
 dump: ./target

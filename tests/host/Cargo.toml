@@ -1,0 +1,11 @@
+[package]
+name = "rios-host-tests"
+version = "0.1.0"
+edition = "2018"
+publish = false
+
+# 親ディレクトリのカーネル用 Cargo.toml に巻き込まれないよう独立させる
+[workspace]
+
+[lib]
+path = "src/lib.rs"

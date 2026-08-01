@@ -13,6 +13,8 @@ Cargo.lock
 .DS_Store
 dist/
 
+tests/host/target/
+
 *.dat
 *.pcap
 *.log
