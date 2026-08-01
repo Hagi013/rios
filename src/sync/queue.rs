@@ -93,14 +93,9 @@ where
     pub fn enqueue(&mut self, data: T) {
         if self.len() == LIMIT { return; }
 
-        self.count += 1;
         self.queue[self.tail] = data;
-
-        if SimpleQueue::<T>::check_index_limit(self.tail) {
-            self.tail += 1;
-        } else {
-            self.tail = INITIAL_INDEX;
-        }
+        self.tail = (self.tail + 1) % LIMIT;
+        self.count += 1;
     }
 
     pub fn enqueue_front(&mut self, data: T) {
@@ -110,14 +105,9 @@ where
     pub fn dequeue(&mut self) -> Option<T> {
         if self.len() <= 0 { return None }
 
-        self.count -= 1;
         let data = Some(self.queue[self.head]);
-
-        if SimpleQueue::<T>::check_index_limit(self.head) {
-            self.head += 1;
-        } else {
-            self.head = INITIAL_INDEX;
-        }
+        self.head = (self.head + 1) % LIMIT;
+        self.count -= 1;
         data
     }
 
@@ -128,78 +118,46 @@ where
     pub fn add(&mut self, data: T, index: usize) {
         if self.len() == LIMIT { return; }
 
-        // 一番最後に追加したい場合
-        if index == self.len() {
+        // 一番最後(かそれ以降)に追加したい場合
+        if index >= self.len() {
             self.enqueue(data);
             return;
         }
 
-        self.count += 1;
-        let rest_count = self.len() - index;
-        for i in 0..rest_count {
-            let mut real_idx = (self.len() - i) - 1;
-            // 配列が循環している状態でも正しく値を取得できるように
-            if self.head + real_idx >= LIMIT - 1 {
-                real_idx = real_idx - (LIMIT - 1 - self.head) + INITIAL_INDEX;
-            }
-
-            let mut real_idx_minus_one = real_idx - 1;
-            if self.head + real_idx_minus_one >= LIMIT - 1 {
-                real_idx_minus_one = real_idx_minus_one - (LIMIT - 1 - self.head) + INITIAL_INDEX;
-            }
-
-            self.queue[real_idx] = self.queue[real_idx_minus_one];
+        // 挿入位置から後ろの要素を一つずつ末尾側へずらす
+        let mut i = self.len();
+        while i > index {
+            let dst = self.get_index_in_queue(i);
+            let src = self.get_index_in_queue(i - 1);
+            self.queue[dst] = self.queue[src];
+            i -= 1;
         }
         // 値のセット
-        let mut target_idx = index;
-        if self.head + target_idx >= LIMIT - 1 {
-            target_idx = target_idx - (LIMIT - 1 - self.head) + INITIAL_INDEX;
-        }
+        let target_idx = self.get_index_in_queue(index);
         self.queue[target_idx] = data;
+        self.tail = (self.tail + 1) % LIMIT;
+        self.count += 1;
     }
 
-    pub fn remove(&mut self, mut index: usize) -> Option<T> {
-        if self.len() <= 0 { return None }
-
-        self.count -= 1;
+    pub fn remove(&mut self, index: usize) -> Option<T> {
+        if index >= self.len() { return None }
 
         // 0番目を取得する場合はdequeueして終わり
         if index == 0 {
             return self.dequeue();
         }
 
-        // 1番最後の要素を取得する場合も取得して、tailから1引けば終わり
-        // すでにcountがマイナスされているので、条件を `index == self.len()` としている
-        if index == self.len() {
-            self.tail -= 1;
-            // 配列が循環している状態でも正しく値を取得できるように
-            if self.head + index >= LIMIT - 1 {
-                index = index - (LIMIT - 1 - self.head) + INITIAL_INDEX;
-            }
-            return Some(self.queue[index]);
-        }
-
-        let mut real_idx: usize = index;
-        if self.head + index >= LIMIT - 1 {
-            real_idx = index - (LIMIT - 1 - self.head) + INITIAL_INDEX;
-        }
         // 値の取得
-        let data = Some(self.queue[real_idx]);
+        let data = Some(self.queue[self.get_index_in_queue(index)]);
 
-        // 端じゃない要素の場合は並び替えが必要になる
-        for i in index..self.len() {
-            let mut target_idx = self.head + i;
-            if (self.head + target_idx) >= (LIMIT - 1) {
-                target_idx = index - (LIMIT - 1 - self.head) + INITIAL_INDEX
-            };
-
-            let mut target_idx_plus_one = target_idx + 1;
-            if (self.head + target_idx_plus_one) >= (LIMIT - 1) {
-                target_idx_plus_one = index - (LIMIT - 1 - self.head) + INITIAL_INDEX
-            };
-            self.queue[target_idx] = self.queue[target_idx_plus_one];
+        // 削除位置より後ろの要素を一つずつ先頭側へ詰める
+        for i in index..self.len() - 1 {
+            let dst = self.get_index_in_queue(i);
+            let src = self.get_index_in_queue(i + 1);
+            self.queue[dst] = self.queue[src];
         }
-        self.tail -= 1;
+        self.tail = (self.tail + LIMIT - 1) % LIMIT;
+        self.count -= 1;
 
         return data;
     }
@@ -242,16 +200,9 @@ where
         self.count
     }
 
+    // 論理インデックス(先頭からの位置)をリングバッファの物理インデックスに変換する
     fn get_index_in_queue(&self, idx: usize) -> usize {
-        let mut i = idx;
-        if idx + self.head > LIMIT - 1 {
-            i = i - (LIMIT - 1 - self.head) + INITIAL_INDEX;
-        }
-        return i;
-    }
-
-    fn check_index_limit(index: usize) -> bool {
-        index < LIMIT - 1
+        (self.head + idx) % LIMIT
     }
 
     pub fn is_empty(&self) -> bool {

@@ -229,3 +229,120 @@ fn enqueue_front_on_empty_queue() {
     assert_eq!(q.len(), 1);
     assert_eq!(q.dequeue(), Some(7));
 }
+
+#[test]
+fn enqueue_front_on_non_empty_queue() {
+    let mut q: SimpleQueue<u32> = SimpleQueue::new();
+    q.enqueue(1);
+    q.enqueue(2);
+    q.enqueue_front(9);
+    assert_eq!(q.len(), 3);
+    assert_eq!(q.dequeue(), Some(9));
+    assert_eq!(q.dequeue(), Some(1));
+    assert_eq!(q.dequeue(), Some(2));
+}
+
+/// head を進めた (リングが回転した) 状態のキュー [3, 4, 5] を作る。
+/// 物理配置: queue[2]=3, queue[3]=4, queue[4]=5, head=2
+fn rotated_queue() -> SimpleQueue<u32> {
+    let mut q: SimpleQueue<u32> = SimpleQueue::new();
+    for v in [1u32, 2, 3] {
+        q.enqueue(v);
+    }
+    q.dequeue(); // 1
+    q.dequeue(); // 2
+    q.enqueue(4);
+    q.enqueue(5);
+    q
+}
+
+#[test]
+fn get_returns_logical_index_after_rotation() {
+    let q = rotated_queue();
+    assert_eq!(q.get(0), Some(3));
+    assert_eq!(q.get(1), Some(4));
+    assert_eq!(q.get(2), Some(5));
+    assert_eq!(q.get(3), None);
+}
+
+#[test]
+fn get_position_in_queue_after_rotation() {
+    let q = rotated_queue();
+    assert_eq!(q.get_position_in_queue(3), Ok(0));
+    assert_eq!(q.get_position_in_queue(5), Ok(2));
+    assert!(q.get_position_in_queue(1).is_err()); // dequeue 済み
+}
+
+#[test]
+fn update_after_rotation_keeps_queue_intact() {
+    let mut q = rotated_queue();
+    // 値 4 を同値で置き換える。他の要素を壊してはいけない
+    assert!(q.update(4).is_ok());
+    assert_eq!(q.dequeue(), Some(3));
+    assert_eq!(q.dequeue(), Some(4));
+    assert_eq!(q.dequeue(), Some(5));
+}
+
+#[test]
+fn remove_middle_after_rotation() {
+    let mut q = rotated_queue();
+    assert_eq!(q.remove(1), Some(4));
+    assert_eq!(q.len(), 2);
+    assert_eq!(q.dequeue(), Some(3));
+    assert_eq!(q.dequeue(), Some(5));
+}
+
+#[test]
+fn remove_entry_after_rotation() {
+    let mut q = rotated_queue();
+    assert!(q.remove_entry(4).is_ok());
+    assert_eq!(q.dequeue(), Some(3));
+    assert_eq!(q.dequeue(), Some(5));
+}
+
+#[test]
+fn add_then_enqueue_does_not_overwrite() {
+    // add が tail を進めないと、直後の enqueue が既存要素を上書きする
+    let mut q: SimpleQueue<u32> = SimpleQueue::new();
+    for v in [1u32, 2, 3] {
+        q.enqueue(v);
+    }
+    q.add(9, 1);
+    q.enqueue(4);
+    assert_eq!(q.len(), 5);
+    assert_eq!(q.dequeue(), Some(1));
+    assert_eq!(q.dequeue(), Some(9));
+    assert_eq!(q.dequeue(), Some(2));
+    assert_eq!(q.dequeue(), Some(3));
+    assert_eq!(q.dequeue(), Some(4));
+}
+
+#[test]
+fn remove_last_element_when_tail_wrapped_to_zero() {
+    // ちょうど 30 個入れると tail が 0 に折り返す。
+    // その状態で末尾を remove しても tail の巻き戻しがアンダーフローしないこと
+    let mut q: SimpleQueue<u32> = SimpleQueue::new();
+    for v in 0..CAPACITY as u32 {
+        q.enqueue(v);
+    }
+    assert_eq!(q.remove(CAPACITY - 1), Some(CAPACITY as u32 - 1));
+    assert_eq!(q.len(), CAPACITY - 1);
+    for v in 0..(CAPACITY as u32 - 1) {
+        assert_eq!(q.dequeue(), Some(v));
+    }
+    assert_eq!(q.dequeue(), None);
+    // remove で空けた分は再度 enqueue できる
+    q.enqueue(100);
+    assert_eq!(q.dequeue(), Some(100));
+}
+
+#[test]
+fn remove_out_of_range_returns_none() {
+    let mut q: SimpleQueue<u32> = SimpleQueue::new();
+    for v in [1u32, 2, 3] {
+        q.enqueue(v);
+    }
+    assert_eq!(q.remove(5), None);
+    assert_eq!(q.len(), 3);
+    assert_eq!(q.dequeue(), Some(1));
+}
