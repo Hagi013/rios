@@ -1,0 +1,15 @@
+# ホスト(std)環境で動くリグレッションテストを PR / push ごとに実行する。
+# stable Rust のみ必要 (nightly / cargo xbuild / QEMU 不要)。
+name: host-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run host regression tests
+        run: make test-host
