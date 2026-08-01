@@ -1,4 +1,4 @@
-#![feature(const_fn)]
+#![feature(const_mut_refs)]
 
 use core::sync::atomic::{ AtomicBool, Ordering, spin_loop_hint as cpu_relax };
 use core::cell::UnsafeCell;

@@ -168,11 +168,17 @@ where
 
         // 0x00000000 - 0x003fffff ⇒ direct mapping(0x00000000(dir index: 0) - 0x003fffff(dir index: 0))
         Self::map_entry(0x00000000, 0x00000000, 0x00400000, KERNEL_BASE_ADDR);
+        // 0x00400000 - 0x007fffff ⇒ direct mapping(0x00400000(dir index: 1) - 0x007fffff(dir index: 1))
+        Self::map_entry(0x00400000, 0x00400000, 0x00400000, KERNEL_BASE_ADDR);
 
         let mut boot_info: BootInfo = BootInfo::new();
-        // 0xfd000000 - 0xfd0c0400(VRAM) ⇒ 0x00400000(dir index: 1) -  0x007fffff(dir index: 1)
-        Self::map_entry(boot_info.vram, 0x00400000, 0x00400000, KERNEL_BASE_ADDR);
-        boot_info.set_addr_vram(0x00400000);
+        // // 0xfd000000 - 0xfd0c0400(VRAM) ⇒ 0x00400000(dir index: 1) -  0x007fffff(dir index: 1)
+        // Self::map_entry(boot_info.vram, 0x00400000, 0x00400000, KERNEL_BASE_ADDR);
+        // boot_info.set_addr_vram(0x00400000);
+
+        // 0xfd000000 - 0xfd0c0400(VRAM) ⇒ 0x00800000(dir index: 2) -  0x00bfffff(dir index: 2)
+        Self::map_entry(boot_info.vram, 0x00800000, 0x00400000, KERNEL_BASE_ADDR);
+        boot_info.set_addr_vram(0x00800000);
 
         // 0xb0000000 - (DMA) 0xb0ffffff ⇒ direct mapping 0xb0000000(dir index: 704) - 0xb0ffffff(dir index: 707)
         Self::map_entry(0xb0000000, 0xb0000000, 0x01000000, KERNEL_BASE_ADDR);
@@ -181,7 +187,9 @@ where
         Self::map_entry(0xfe000000, 0xfe000000, 0x01000000, KERNEL_BASE_ADDR);
 
         // 0x00e80000 - 0x40a80000(Heap) ⇒ 0x00800000(dir index: 2) - 0x3fffffff(dir index: 255)
-        Self::map_entry(0x00e80000, 0x00800000, 0x3f800000, KERNEL_BASE_ADDR);
+        // Self::map_entry(0x00e80000, 0x00800000, 0x3f800000, KERNEL_BASE_ADDR);
+        // 0x00e80000 - 0x40a80000(Heap) ⇒ 0x00c00000(dir index: 3) - 0x3fffffff(dir index: 255)
+        Self::map_entry(0x00e80000, 0x00c00000, 0x3f400000, KERNEL_BASE_ADDR);
 
         Ok(PageTableImpl {
             physical_base_virtual_address: KERNEL_BASE_ADDR,
@@ -298,8 +306,9 @@ where
 
 #[no_mangle]
 pub extern "C" fn page_fault_handler(esp: *const usize) {
-    Graphic::putfont_asc(10, 345, 10, "Page Fault!!");
+    Graphic::putfont_asc(10, 345, 0, "Page Fault!!");
     let vir_address = asmfunc::load_cr2();
+
     {
         if let Some(ref mut table) = *KERNEL_TABLE.lock() {
             table.map(vir_address);

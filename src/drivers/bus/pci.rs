@@ -20,7 +20,12 @@ use crate::spin::mutex::{Mutex, MutexGuard};
 const CONFIG_ADDR: i32 = 0x0cf8;
 const CONFIG_DATA: i32 = 0x0cfc;
 const PCI_CONF_DID_VID: u8 = 0x00;
+const PCI_CONF_STATUS_COMMAND: u8 = 0x04;
+const PCI_CONF_CLASS_INTERFACE_REVISION: u8 = 0x08;
+const PCI_CONF_BIST_HEADER_LATENCY_CACHELINE: u8 = 0x0c;
 const PCI_CONF_BAR: u8 = 0x10;
+const PCI_CONF_BAR1: u8 = 0x14;
+const PCI_CONF_BAR2: u8 = 0x18;
 
 const NIC_BUS_NUM: u8 = 0x00;
 // const NIC_DEV_NUM: u8 = 0x04;
@@ -40,8 +45,6 @@ const NIC_REG_TDBAH: u16 = 0x3804;
 const NIC_REG_TDLEN: u16 = 0x3808;
 const NIC_REG_TDH: u16 = 0x3810;
 const NIC_REG_TDT: u16 = 0x3818;
-
-const PCI_CONF_STATUS_COMMAND: u8 = 0x04;
 
 const PCI_COM_IO_EN: u32 = 0x01 << 0;
 const PCI_COM_MEM_EN: u32 = 0x01 << 1;
@@ -173,9 +176,9 @@ impl PciConfiguration {
     }
 }
 
-struct BaseAddressRegister(u32);
+pub struct BaseAddressRegister(u32);
 impl BaseAddressRegister {
-    fn new(addr: i32) -> Self {
+    pub fn new(addr: i32) -> Self {
         BaseAddressRegister(addr as u32)
     }
 
@@ -202,11 +205,15 @@ impl BaseAddressRegister {
         self.0 & 0x01 > 0
     }
 
-    fn base_addr(&self) -> u32 {
+    pub fn base_addr(&self) -> u32 {
         if self.io_address() {
             return self.0 & 0xfffffffc;
         }
         self.0 & 0xfffffff8
+    }
+
+    pub fn content(&self) -> &u32 {
+        &self.0
     }
 }
 
@@ -215,8 +222,18 @@ pub fn get_pci_conf_reg(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8, reg: u
     io_in32(CONFIG_DATA)
 }
 
+pub fn get_pci_conf_reg_from_memory(memory: u32) -> i32 {
+    io_out32(CONFIG_ADDR, memory);
+    io_in32(CONFIG_DATA)
+}
+
 pub fn set_pci_conf_reg(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8, reg: u8, val: u32) {
     io_out32(CONFIG_ADDR, PciConfiguration::new(true, nic_bus_num, nic_dev_num, nic_fn_num, reg).0);
+    io_out32(CONFIG_DATA, val);
+}
+
+pub fn set_pci_conf_reg_from_memory(memory: u32, val: u32) {
+    io_out32(CONFIG_ADDR, memory);
     io_out32(CONFIG_DATA, val);
 }
 
@@ -229,12 +246,15 @@ pub fn get_nic_reg(reg: u16) -> u32 {
     // let mut pointer = unsafe { *(&mut base_addr as *mut u32).offset(0 as isize) as *mut u32 as u32 };
     // let mut printer = Printer::new(900, 305, 0);
     // write!(printer, "{:?}", unsafe { *(*&mut pointer as *mut u32) as *mut u32 }).unwrap(); // 0xffef3 => 0xfebc0000
-    unsafe { *(*&mut (base_addr + reg as u32) as *mut u32) }
+
+    // unsafe { *(*&mut (base_addr + reg as u32) as *mut u32) }
+    unsafe { read_mem!((*&mut (base_addr + reg as u32) as *mut u32)) }
 }
 
 pub fn set_nic_reg(reg: u16, val: u32) {
     let mut base_addr = get_nic_reg_base();
-    unsafe { *(*&mut (base_addr + reg as u32) as *mut u32) = val };
+    // unsafe { *(*&mut (base_addr + reg as u32) as *mut u32) = val };
+    unsafe { write_mem!((*&mut (base_addr + reg as u32) as *mut u32), val) };
 }
 
 pub fn dump_vid_did() {
@@ -437,6 +457,205 @@ pub fn disable_nic_interrupt() {
     set_nic_reg(NIC_REG_IMC, 0xffffffff);
 }
 
+pub fn read_vendor_id(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8) -> u16 {
+    let conf_data = get_pci_conf_reg(nic_bus_num, nic_dev_num, nic_fn_num, PCI_CONF_DID_VID);
+    (conf_data & 0x0000ffff) as u16
+}
+
+fn read_device_id(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8) -> u16 {
+    let conf_data = get_pci_conf_reg(nic_bus_num, nic_dev_num, nic_fn_num, PCI_CONF_DID_VID);
+    (conf_data >> 16) as u16
+}
+
+fn read_header_type(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8) -> u8 {
+    let conf_data = get_pci_conf_reg(nic_bus_num, nic_dev_num, nic_fn_num, PCI_CONF_BIST_HEADER_LATENCY_CACHELINE);
+    (conf_data >> 16 & 0x00ff) as u8
+}
+
+fn read_class(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8) -> u32 {
+    get_pci_conf_reg(nic_bus_num, nic_dev_num, nic_fn_num, PCI_CONF_CLASS_INTERFACE_REVISION) as u32
+}
+
+fn read_bus_numbers(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8) -> u32 {
+    get_pci_conf_reg(nic_bus_num, nic_dev_num, nic_fn_num, PCI_CONF_BAR2) as u32
+}
+
+fn is_single_function_device(header_type: u8) -> bool {
+    header_type & 0x80 == 0
+}
+
+pub fn scan_all_bus() -> Result<(), ()> {
+    let header_type = read_header_type(0, 0, 0);
+    if is_single_function_device(header_type) {
+        return scan_bus(0);
+    }
+    for nic_fn_num in 1..8 {
+        if read_device_id(0, 0, nic_fn_num) == 0xffff {
+            continue;
+        }
+        match scan_bus(nic_fn_num) {
+            Ok(_) => continue,
+            Err(_) => return Err(()),
+        }
+    }
+    Ok(())
+}
+
+fn scan_bus(nic_bus_num: u8) -> Result<(), ()> {
+    for nic_dev_num in 0..(32 as u8) {
+        if read_device_id(nic_bus_num, nic_dev_num, 0x00) == 0xffff { continue; }
+        match scan_device(nic_bus_num, nic_dev_num) {
+            Ok(_) => continue,
+            Err(_) => return Err(()),
+        }
+    }
+    Ok(())
+}
+
+fn scan_device(nic_bus_num: u8, nic_dev_num: u8) -> Result<(), ()> {
+    match scan_fn(nic_bus_num, nic_dev_num, 0) {
+        Ok(_) => {},
+        Err(_) => return Err(()),
+    }
+    // if is_single_function_device(read_header_type(nic_bus_num, nic_dev_num, 0)) { return Ok(()); }
+    for nic_fn_num in 0..8 {
+        if read_vendor_id(nic_bus_num, nic_dev_num, nic_fn_num) == 0xffff { continue; }
+        match scan_fn(nic_bus_num, nic_dev_num, nic_fn_num) {
+            Ok(_) => {},
+            Err(_) => return Err(()),
+        }
+    }
+    Ok(())
+}
+
+fn scan_fn(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8) -> Result<(), ()> {
+    let class_code = read_class(nic_bus_num, nic_dev_num, nic_fn_num);
+    let class_base = (class_code >> 24) as u8;
+    let class_sub = ((class_code >> 16) & 0x00ff) as u8;
+    let header_type = read_header_type(nic_bus_num, nic_dev_num, nic_fn_num);
+    match add_device(nic_bus_num, nic_dev_num, nic_fn_num, header_type, class_code) {
+        Ok(()) => {},
+        Err(()) => {},
+    }
+
+    // standard PCI-PCI bridge
+    if class_base == 0x06 && class_sub == 0x04 {
+        let bus_numbers = read_bus_numbers(nic_bus_num, nic_dev_num, nic_fn_num);
+        let secondary_bus = ((bus_numbers >> 8) & 0xff) as u8;
+        return scan_bus(secondary_bus);
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+#[repr(C, packed)]
+struct ClassCode {
+    base_class: u8,
+    sub_class: u8,
+    interface: u8,
+}
+
+impl ClassCode {
+    fn is_xhc(&self) -> bool {
+        self.base_class == 0x0c && self.sub_class == 0x03 && self.interface == 0x30
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C, packed)]
+pub struct Device {
+    pub nic_bus_num: u8,
+    pub nic_dev_num: u8,
+    pub nic_fn_num: u8,
+    header_type: u8,
+    class_code: ClassCode,
+}
+
+impl Device {
+    fn new(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8, header_type: u8, class: u32) -> Device {
+        let class_code = ClassCode {
+            base_class: (class >> 24) as u8,
+            sub_class: (class >> 16 & 0xff) as u8,
+            interface: (class >> 8 & 0xff) as u8,
+        };
+        Device {
+            nic_bus_num, nic_dev_num, nic_fn_num,
+            header_type, class_code,
+        }
+    }
+    fn is_xhc(&self) -> bool {
+        self.class_code.is_xhc()
+    }
+}
+
+static mut DEVICE_LIST: [Option<Device>; 256] = [None; 256];
+fn add_device(nic_bus_num: u8, nic_dev_num: u8, nic_fn_num: u8, header_type: u8, class_code: u32) -> Result<(), ()> {
+    unsafe {
+        for (idx, option) in DEVICE_LIST.iter_mut().enumerate() {
+            if option.is_none() {
+                write_mem!(
+                    &mut DEVICE_LIST[idx],
+                   Some(Device::new(nic_bus_num, nic_dev_num, nic_fn_num, header_type, class_code))
+                );
+                // let mut printer = Printer::new(300, 370, 0);
+                // write!(printer, "{:x}", &mut DEVICE_LIST as *const _ as u32).unwrap();
+                // let mut printer = Printer::new(300, 415 + (nic_bus_num as u32 * 45) + (nic_dev_num as u32 * 30) + (nic_fn_num as u32 * 15), 0);
+                // write!(printer, "{:?}", nic_bus_num).unwrap();
+                // let mut printer = Printer::new(315, 415 + (nic_bus_num as u32 * 45) + (nic_dev_num as u32 * 30) + (nic_fn_num as u32 * 15), 0);
+                // write!(printer, "{:?}", nic_dev_num).unwrap();
+                // let mut printer = Printer::new(330, 415 + (nic_bus_num as u32 * 45) + (nic_dev_num as u32 * 30) + (nic_fn_num as u32 * 15), 0);
+                // write!(printer, "{:?}", nic_fn_num).unwrap();
+                // let mut printer = Printer::new(345, 415 + (nic_bus_num as u32 * 45) + (nic_dev_num as u32 * 30) + (nic_fn_num as u32 * 15), 0);
+                // write!(printer, "{:x}", class_code).unwrap();
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn search_xhc_base_addr() -> Option<BaseAddressRegister> {
+    unsafe {
+        for (idx, option) in DEVICE_LIST.iter().enumerate() {
+            if let Some(device) = option {
+               let mut printer = Printer::new(385, 415 + (device.nic_bus_num as u32 * 45) + (device.nic_dev_num as u32 * 30) + (device.nic_fn_num as u32 * 15), 0);
+               write!(printer, "{:?}", device.is_xhc()).unwrap();
+               if device.is_xhc() {
+                   // let vendor_id = read_vendor_id(device.nic_bus_num, device.nic_dev_num, device.nic_fn_num);
+                   // if vendor_id == 0x8086 { break; }
+                   let dev = Device {
+                       nic_bus_num: device.nic_bus_num,
+                       nic_dev_num: device.nic_dev_num,
+                       nic_fn_num: device.nic_fn_num,
+                       header_type: device.header_type,
+                       class_code: ClassCode {
+                           base_class: device.class_code.base_class,
+                           sub_class: device.class_code.sub_class,
+                           interface: device.class_code.interface,
+                       },
+                   };
+                   if let Ok(bar) = get_bar_from_dev(&dev, PCI_CONF_BAR) {
+                       return Some(bar)
+                   }
+               }
+           }
+        }
+    }
+    None
+}
+
+pub fn get_bar_from_dev(dev: &Device, bar_num: u8) -> Result<BaseAddressRegister, ()> {
+    let mut printer = Printer::new(300, 400, 0);
+    write!(printer, "{:?}", dev.nic_bus_num).unwrap();
+    let mut printer = Printer::new(310, 400, 0);
+    write!(printer, "{:?}", dev.nic_dev_num).unwrap();
+    let mut printer = Printer::new(320, 400, 0);
+    write!(printer, "{:?}", dev.nic_fn_num).unwrap();
+    let bar: BaseAddressRegister = BaseAddressRegister::new(get_pci_conf_reg(dev.nic_bus_num, dev.nic_dev_num, dev.nic_fn_num, bar_num));
+    Ok(bar)
+}
+
+
 #[derive(Copy, Clone)]
 struct BufferAddr {
     desc_base_low: u32,
@@ -545,7 +764,15 @@ const fn tx_desc_data_size() -> usize { size_of::<TxDesc>() * TXDESC_NUM }
 
 // RxDescの配列を格納するリングバッファ
 static mut RX_DESC_DATA: [RxDesc; RXDESC_NUM] = [RxDesc::new_const(); RXDESC_NUM];
-static mut TX_DESC_DATA: [TxDesc; TXDESC_NUM] = [TxDesc::new_const(); TXDESC_NUM];
+// static mut TX_DESC_DATA: [TxDesc; TXDESC_NUM] = [TxDesc::new_const(); TXDESC_NUM];
+
+#[repr(align(128), C)]
+struct TxDescArray {
+    data: [TxDesc; TXDESC_NUM],
+}
+static mut TX_DESC_DATA: TxDescArray = TxDescArray {
+    data: [TxDesc::new_const(); TXDESC_NUM],
+};
 
 // RX_DESC_DATAのベースアドレス
 // static mut RX_DESC_DATA_BASE: Option<*mut RxDesc> = None;
@@ -654,7 +881,8 @@ pub fn receive_frame() -> Vec<u8> {
         let mut printer = Printer::new(100, 190, 0);
         write!(printer, "{:?}", current_rxdesc.length).unwrap(); // この時点でICMPは4バイト多くなってる
         for idx in 0..current_rxdesc.length {
-            let byte = unsafe { *(current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize) };
+            // let byte = unsafe { *(current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize) };
+            let byte = unsafe { read_mem!((current_rxdesc.recv_buf_addr.desc_base_low as *mut u8).offset(idx as isize)) };
             buf.push(byte);
         }
         // current_rxdesc.status = 0;
@@ -672,16 +900,21 @@ pub fn receive_frame() -> Vec<u8> {
 
 pub fn tx_init() {
     let mut tx_desc_data_for_initialization: [TxDesc; TXDESC_NUM] = [TxDesc::new(); TXDESC_NUM];
-    for (idx, cur_rxdesc) in unsafe { TX_DESC_DATA.iter_mut().enumerate() } {
+    for (idx, cur_rxdesc) in unsafe { TX_DESC_DATA.data.iter_mut().enumerate() } {
         (*cur_rxdesc).tx_buf_address.desc_base_low = 0x00000000;
         (*cur_rxdesc).tx_buf_address.desc_base_high = 0x00000000;
+        (*cur_rxdesc).length = 0;
+        (*cur_rxdesc).cso = 0;
+        (*cur_rxdesc).cmd = NIC_TDESC_CMD_RS | NIC_TDESC_CMD_EOP;
+        (*cur_rxdesc).css = 0;
+        (*cur_rxdesc).special = 0;
         tx_desc_data_for_initialization[idx] = *cur_rxdesc;
     }
-    unsafe { TX_DESC_DATA = tx_desc_data_for_initialization; }
+    unsafe { TX_DESC_DATA.data = tx_desc_data_for_initialization; }
 
     /* txdescの先頭アドレスとサイズをNICレジスタへ設定 */
     set_nic_reg(NIC_REG_TDBAH, 0x00);
-    set_nic_reg(NIC_REG_TDBAL, unsafe { &mut TX_DESC_DATA as *mut [TxDesc; TXDESC_NUM] as u32 });
+    set_nic_reg(NIC_REG_TDBAL, unsafe { TX_DESC_DATA.data.as_ptr() as u32 });
     set_nic_reg(NIC_REG_TDLEN, tx_desc_data_size() as u32);
 
     set_nic_reg(NIC_REG_TDH, unsafe { *CURRENT_TX_IDX.lock() as u32 });
@@ -690,17 +923,17 @@ pub fn tx_init() {
     set_nic_reg(NIC_REG_TCTL, (0x40 << NIC_TCTL_COLD_SHIFT) | (0x0f << NIC_TCTL_CT_SHIFT) | NIC_TCTL_PSP | NIC_TCTL_EN);
 
     let mut printer = Printer::new(700, 400, 0);
-    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA as *mut [TxDesc; TXDESC_NUM] as u32 }).unwrap();
+    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA.data as *mut [TxDesc; TXDESC_NUM] as u32 }).unwrap();
     let mut printer = Printer::new(700, 415, 0);
-    write!(printer, "{:?}", unsafe { &mut TX_DESC_DATA[0] as *mut TxDesc }).unwrap();
+    write!(printer, "{:?}", unsafe { &mut TX_DESC_DATA.data[0] as *mut TxDesc }).unwrap();
     let mut printer = Printer::new(700, 430, 0);
-    write!(printer, "{:x}", unsafe { TX_DESC_DATA[0].tx_buf_address.low() }).unwrap();
+    write!(printer, "{:x}", unsafe { TX_DESC_DATA.data[0].tx_buf_address.low() }).unwrap();
     let mut printer = Printer::new(700, 445, 0);
-    write!(printer, "{:x}", unsafe { TX_DESC_DATA[0].tx_buf_address.high() }).unwrap();
+    write!(printer, "{:x}", unsafe { TX_DESC_DATA.data[0].tx_buf_address.high() }).unwrap();
     let mut printer = Printer::new(700, 460, 0);
-    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA[0].tx_buf_address as *mut BufferAddr as u32 }).unwrap();
+    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA.data[0].tx_buf_address as *mut BufferAddr as u32 }).unwrap();
     let mut printer = Printer::new(700, 475, 0);
-    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA[1].tx_buf_address as *mut BufferAddr as u32 }).unwrap();
+    write!(printer, "{:x}", unsafe { &mut TX_DESC_DATA.data[1].tx_buf_address as *mut BufferAddr as u32 }).unwrap();
 }
 
 
@@ -713,13 +946,13 @@ pub fn send_frame(mut buf: Vec<u8>) -> u8 {
         let idx = { (*CURRENT_TX_IDX.lock()).clone() };
         *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
 
-        TX_DESC_DATA[current_idx].tx_buf_address.desc_base_low = dma_buf.as_ptr() as u32;
-        TX_DESC_DATA[current_idx].length = buf.len() as u16;
-        TX_DESC_DATA[current_idx].sta_rsv = 0x00;
+        TX_DESC_DATA.data[current_idx].sta_rsv = 0x00;
+        TX_DESC_DATA.data[current_idx].tx_buf_address.desc_base_low = dma_buf.as_ptr() as u32;
+        TX_DESC_DATA.data[current_idx].length = buf.len() as u16;
         set_nic_reg(NIC_REG_TDT, unsafe { *CURRENT_TX_IDX.lock() as u32 });
 
         let mut send_status: u8 = 0;
-        while send_status == 0 { send_status = read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv & 0x0f; }
+        while send_status == 0 { send_status = read_mem!(&TX_DESC_DATA.data[current_idx]).sta_rsv & 0x0f; }
         let mut printer = Printer::new(500, 705, 0);
         write!(printer, "{:x}", send_status).unwrap();
         return send_status;
@@ -732,71 +965,45 @@ pub fn send_buf_frame(buf: DmaBox<[u8]>) -> u8 {
         let idx = { (*CURRENT_TX_IDX.lock()).clone() };
         *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
 
-        TX_DESC_DATA[current_idx].length = buf.len() as u16;
-        TX_DESC_DATA[current_idx].tx_buf_address.desc_base_low = buf.as_ptr() as u32;
-        TX_DESC_DATA[current_idx].sta_rsv = 0;
+        TX_DESC_DATA.data[current_idx].sta_rsv = 0;
+        TX_DESC_DATA.data[current_idx].length = buf.len() as u16;
+        TX_DESC_DATA.data[current_idx].tx_buf_address.desc_base_low = buf.as_ptr() as u32;
 
         set_nic_reg(NIC_REG_TDT, unsafe { *CURRENT_TX_IDX.lock() as u32 });
         let mut send_status: u8 = 0;
-        while send_status == 0 { send_status = read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv & 0x0f; }
+        Graphic::putfont_asc(500, 285, 0, "send_status");
+        let mut printer = Printer::new(500, 300, 0);
+        write!(printer, "{:x}", send_status).unwrap();
+        while send_status == 0 { send_status = read_mem!(&TX_DESC_DATA.data[current_idx]).sta_rsv & 0x0f; }
+        let mut printer = Printer::new(500, 330, 0);
+        write!(printer, "{:x}", send_status).unwrap();
         return send_status;
     };
 }
 
 pub fn send_test_frame() -> u8 {
-    let buf: [u8; 590]  = [
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x08, 0x00, 0x27, 0x66, 0x10, 0x65, 0x08, 0x00, 0x45, 0x00,
-        0x02, 0x40, 0x0c, 0x54, 0x00, 0x00, 0xff, 0x11, 0xb4, 0x4c, 0xc0, 0xa8, 0x38, 0x80, 0xff, 0xff,
-        0xff, 0xff, 0x00, 0x43, 0x00, 0x44, 0x02, 0x2c, 0x86, 0xef, 0x02, 0x01, 0x06, 0x00, 0x84, 0x17,
-        0x02, 0xa6, 0x00, 0x00, 0x00, 0x00, 0xc0, 0xa8, 0x38, 0x67, 0xc0, 0xa8, 0x38, 0x67, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x27, 0x99, 0xf3, 0x6c, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x63, 0x82, 0x53, 0x63, 0x36, 0x04, 0xc0, 0xa8, 0x38, 0x64,
-        0x35, 0x01, 0x02, 0x33, 0x04, 0x00, 0x00, 0x04, 0xb0, 0x01, 0x04, 0xff, 0xff, 0xff, 0x00, 0xff,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    let buf: [u8; 0x10] = [
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x52, 0x54, 0x00, 0x12, 0x34, 0x56, 0x08, 0x00, 0x45, 0x00,
     ];
 
     unsafe {
         let current_idx = unsafe { *CURRENT_TX_IDX.lock() };
-        TX_DESC_DATA[current_idx].length = buf.len() as u16;
-        TX_DESC_DATA[current_idx].tx_buf_address.desc_base_low = buf.as_ptr() as u32;
+        // TX_DESC_DATA.data[current_idx].sta_rsv = 0;
+        // let mut d = DmaBox::from(buf);
+        // TX_DESC_DATA.data[current_idx].tx_buf_address.desc_base_low = d.as_mut_ptr() as u32;
+        // TX_DESC_DATA.data[current_idx].length = buf.len() as u16;
 
-        TX_DESC_DATA[current_idx].sta_rsv = 0;
+        write_mem!(&mut TX_DESC_DATA.data[current_idx].sta_rsv as *mut u8, 0);
+        let mut d = DmaBox::from(buf);
+        write_mem!(&mut TX_DESC_DATA.data[current_idx].tx_buf_address.desc_base_low as *mut u32, d.as_mut_ptr() as u32);
+        write_mem!(&mut TX_DESC_DATA.data[current_idx].length as *mut u16, buf.len() as u16);
 
-        let idx = { (*CURRENT_TX_IDX.lock()).clone() };
+        let idx = (*CURRENT_TX_IDX.lock()).clone();
         *CURRENT_TX_IDX.lock() = (idx + 1) % TXDESC_NUM;
 
         set_nic_reg(NIC_REG_TDT, unsafe { *CURRENT_TX_IDX.lock() as u32 });
         let mut send_status: u8 = 0;
-        while send_status == 0 { send_status = read_mem!(&TX_DESC_DATA[current_idx]).sta_rsv & 0x0f; }
+        while send_status == 0 { send_status = read_mem!(&TX_DESC_DATA.data[current_idx]).sta_rsv & 0x0f; }
         return send_status;
     };
 }

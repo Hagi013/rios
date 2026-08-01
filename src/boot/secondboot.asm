@@ -11,22 +11,19 @@ VBEMODE equ     0x105             ; 1024 x 768 x 8bitカラー
 ; 0x105 :   1024 x 768 x 8bitカラー
 ; 0x107 :   1200 x 1024 x 8bitカラー
 
-INITOS  equ     0x00280000      ; OS本体部分のロード先
-;STACK   equ     0x00480000      ; Stack領域
-;STACK   equ     0x0057ffff      ; Stack領域
-;STACK   equ     0x00300000      ; Stack領域
-STACK  equ      0x003fffff      ; Stack領域
-;STACK   equ     0x00310000      ; Stack領域
-DSKCAC  equ     0x00100000      ; ディスクキャッシュの場所
-DSKCAC0 equ     0x00008000      ; ディスクキャッシュの場所(リアルモード)
+INITOS  equ     0x00280000          ; OS本体部分のロード先（2.5MB位置から）
+STACK   equ     0x007ffff0            ; Stack領域（8MB位置）
+; DSKCAC  equ     0x00100000      ; ディスクキャッシュの場所
+; DSKCAC0 equ     0x00008000      ; ディスクキャッシュの場所(リアルモード)
 
 ; BOOT_INFO関係
-CYLS    equ     0x0ff0          ; ブートセクタが設定する
+; CYLS    equ     0x0ff0          ; ブートセクタが設定する
 LEDS    equ     0x0ff1
 VMODE   equ     0x0ff2          ; 色すうに関する情報。何ビットカラーか?
 SCRNX   equ     0x0ff4          ; 解像度のX
 SCRNY   equ     0x0ff6          ; 解像度のY
 VRAM    equ     0x0ff8          ; グラフィックバッファの開始番地
+; CYL     equ     0x4a            ; シリンダー4aまで読み込む
 
         org     0xc200          ; このプログラムがどこに読み込まれるのか
 
@@ -88,7 +85,6 @@ scrn320:
         mov     DWORD [VRAM], 0x000a0000
 
 ; キーボードのLED状態をBIOSに教えてもらう
-
 keystatus:
         mov     ah, 0x02
         int     0x16
@@ -98,7 +94,6 @@ keystatus:
 ;   AT互換機の使用では、PICの初期化をするなら、
 ;   こいつをCLI前にやっておかないと、たまにハングアップする
 ;   PICの初期化は後でやる
-
         mov     al, 0xff
         out     0x21, al
         nop                         ; out命令を連続させるとうまくいかない機種があるらしいので
@@ -106,8 +101,8 @@ keystatus:
 
         cli                         ; さらにCPUレベルでも割り込み禁止
 
-; CPUから1MB以上のメモリにアクセスできるように、A20GATEを設定
-
+; CPUから1MB以上のメモリにアクセスできるように、A20GATEを設定 後でこのsectionは消す
+enablea20:
         call    waitkbdout
         mov     al, 0xd1
         out     0x64, al
@@ -115,9 +110,10 @@ keystatus:
         mov     al, 0xdf            ; enable A20
         out     0x60, al
         call    waitkbdout
+        jmp     moveprotect
 
 ; プロテクトモードへの移行
-
+moveprotect:
         LGDT    [GDTR0]             ; 暫定のGDTを設定
         mov     eax, cr0
         and     eax, 0x7fffffff     ; bit31を0にする(ページング禁止のため)
@@ -134,33 +130,32 @@ pipelineflush:
         mov     gs, ax
         mov     ss, ax
 
-; OS本体の転送
 
+; OS本体の転送
+copyos:
         mov     esi, init_os         ; 転送元
         mov     edi, INITOS         ; 転送先
-        mov     ecx, 512*1024/4     ; 512KB
-;        mov     ecx, 2048*1024/4    ; 2MB
-;        jmp     $
+        mov     ecx, 4*1024*1024/4    ; 4MB
         call    memcpy
 
 ; ついでにディスクデータも本来の位置へ転送
 
 ; 先ずはブートセクタから
 
-        mov     esi, 0x7c00         ; 転送元
-        mov     edi, DSKCAC         ; 転送先
-        mov     ecx, 512/4
-        call    memcpy
+;         mov     esi, 0x7c00         ; 転送元
+;         mov     edi, DSKCAC         ; 転送先
+;         mov     ecx, 512/4
+;         call    memcpy
 
 ; 残り全部
 
-        mov     esi, DSKCAC0+512    ; 転送元
-        mov     edi, DSKCAC+512     ; 転送先
-        mov     ecx, 0
-        mov     cl, BYTE [CYLS]
-        imul    ecx, 512*18*2/4     ; シリンダ数からバイト数/4に変換
-        sub     ecx, 512/4          ; IPLの分だけ差し引く
-        call    memcpy
+;         mov     esi, DSKCAC0+512    ; 転送元
+;         mov     edi, DSKCAC+512     ; 転送先
+;         mov     ecx, 0
+;         mov     cl, BYTE [CYLS]
+;         imul    ecx, 512*18*2/4     ; シリンダ数からバイト数/4に変換
+;         sub     ecx, 512/4          ; IPLの分だけ差し引く
+;         call    memcpy
 
 ; asmheadでしなければいけないことは全部出し終わったので
 ;   後はinitosに任せる

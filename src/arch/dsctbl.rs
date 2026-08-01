@@ -76,10 +76,13 @@ impl DscTbl {
 
     fn init_gdt() -> [*mut SegmentDescriptorEntry; LIMIT_GDT / 8] {
         let mut segment_descriptor_table: [*mut SegmentDescriptorEntry; LIMIT_GDT / 8] = [0 as *mut SegmentDescriptorEntry; LIMIT_GDT / 8];
-        (0..(LIMIT_GDT / 8))
-            .map(|idx| DscTbl::set_segmdesc(idx as u32, 0, 0, 0))
-            .zip(segment_descriptor_table.iter_mut());
-//            .for_each(|(setted_entry, init_table_entry)| *init_table_entry = setted_entry);
+        for idx in 0..(LIMIT_GDT / 8) {
+            segment_descriptor_table[idx] = DscTbl::set_segmdesc(idx as u32, 0, 0, 0)
+        }
+        // (0..(LIMIT_GDT / 8))
+        //     .map(|idx| DscTbl::set_segmdesc(idx as u32, 0, 0, 0))
+        //     .zip(segment_descriptor_table.iter_mut());
+        // //    .for_each(|(setted_entry, init_table_entry)| *init_table_entry = setted_entry);
 
         segment_descriptor_table[1] = DscTbl::set_segmdesc(1, 0xffffffff, 0x00000000, AR_DATA32_RW);
         segment_descriptor_table[2] = DscTbl::set_segmdesc(2, LIMIT_OSPAK, ADR_OSPAK, AR_CODE32_ER);
@@ -109,11 +112,13 @@ impl DscTbl {
 
     fn init_idt() -> [*mut GateDescriptorEntry; LIMIT_IDT / 8] {
         let mut gate_descriptor_table: [*mut GateDescriptorEntry; LIMIT_IDT / 8] = [0 as *mut GateDescriptorEntry; LIMIT_IDT / 8];
-        (0..(LIMIT_IDT / 8))
-            .map(|idx| DscTbl::set_gatedesc(idx as u32, 0, 0, 0))
-            .zip(gate_descriptor_table.iter_mut())
-            .for_each(|(b, df)| *df = b);
-
+        // (0..(LIMIT_IDT / 8))
+        //     .map(|idx| DscTbl::set_gatedesc(idx as u32, 0, 0, 0))
+        //     .zip(gate_descriptor_table.iter_mut())
+        //     .for_each(|(b, df)| *df = b);
+        for idx in (0..(LIMIT_IDT / 8)) {
+            gate_descriptor_table[idx] = DscTbl::set_gatedesc(idx as u32, 0, 0, 0)
+        }
         asmfunc::load_idtr(LIMIT_IDT as u32, ADR_IDT);
 
         gate_descriptor_table[0x04] = DscTbl::set_fn_gatedesc(0x04 as u32, asm_inthandler04, 2 * 8, AR_INTGATE32);

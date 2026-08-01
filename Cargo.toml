@@ -10,7 +10,7 @@ crate-type = ["staticlib"]
 
 [profile.dev]
 panic = "abort"
-opt-level = 'z'
+opt-level = 3
 debug = true
 lto = true
 
@@ -31,6 +31,3 @@ incremental = true
 overflow-checks = true
 
 [dependencies]
-
-[package.metadata.cargo-xbuild]
-memcpy = true
