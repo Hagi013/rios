@@ -107,6 +107,7 @@ fn init_heap() {
     unsafe { ALLOCATOR.init(heap_start, heap_size) };
 }
 
+// noinspection RsUnresolvedPath
 #[cfg(not(test))]
 #[start]
 #[no_mangle]
@@ -299,6 +300,7 @@ pub extern "C" fn panic(_info: &PanicInfo) -> ! {
 #[allow(non_snake_case)]
 pub extern "C" fn _Unwind_Resume(_ex_obj: *mut ()) { }
 
+// noinspection RsUnresolvedPath
 #[alloc_error_handler]
 fn alloc_error_handler(layout: Layout) -> ! {
     Graphic::putfont_asc(0, 400, 0, "alloc_error_handler!!!!!");
