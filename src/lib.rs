@@ -94,6 +94,8 @@ use crate::drivers::net::ip::IpHdr;
 use crate::drivers::net::icmp::{IcmpHeader, send_icmp, receive_icmp};
 use crate::drivers::net::udp::receive_udp;
 
+use arch::serial::{ SerialPort, serial_print_char };
+
 fn init_heap() {
     // let heap_start: usize = 0x00e80000;
     // let heap_end: usize = 0x3fff0000;
@@ -165,6 +167,15 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     // let mut printer = Printer::new(300, 500, 0);
     // write!(printer, "{:?}", "initialized xhci").unwrap();
     let mut idx: u32 = 10;
+
+    serial_print_char('h');
+    serial_print_char('e');
+    serial_print_char('l');
+    serial_print_char('l');
+    serial_print_char('o');
+    serial_print_char('!');
+    serial_print_char('\n');
+    serial_println!("{}", "hello, world!");
 
     loop {
         asmfunc::io_cli();
@@ -316,6 +327,9 @@ fn alloc_error_handler(layout: Layout) -> ! {
     write!(printer, "{:?}", layout.size()).unwrap();
     let mut printer = Printer::new(0, 515, 0);
     write!(printer, "{:?}", layout.align()).unwrap();
+    serial_println!("{}", "alloc_error_handler!!!!!");
+    serial_println!("{}", layout.size());
+    serial_println!("{}", layout.align());
 
     loop {
         asmfunc::io_hlt();

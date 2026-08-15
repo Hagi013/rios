@@ -67,7 +67,7 @@ qemu:	$(BUILD_DIR)/$(BUILD_NAME).img
 		-M smm=off \
 		-d trace:ps2_keyboard_event,trace:ps2_kbd_init,trace:ps2_mouse_send_packet,trace:e1000e_tx_disabled,trace:e1000e_tx_descr,trace:e1000e_ring_free_space,trace:e1000e_rx_can_recv_rings_full,trace:e1000e_rx_can_recv,trace:e1000e_rx_receive_iov,trace:e1000e_irq_msi_notify,trace:e1000e_irq_legacy_notify \
 		-drive file=$(BUILD_DIR)/$(BUILD_NAME).img,format=raw,if=ide \
-		-monitor stdio \
+		-serial mon:stdio \
 		$(DEBUG) \
 		$(DEBUG_MODE) \
 		-device e1000,netdev=net0 -netdev user,id=net0,hostfwd=udp::60022-:22,hostfwd=tcp::5900-:5900 \
