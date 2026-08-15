@@ -152,10 +152,18 @@ pub extern fn init_os(argc: isize, argv: *const *const u8) -> isize {
     pci::scan_all_bus();
     // let base_addr_opt = pci::search_xhc_base_addr();
     // if base_addr_opt.is_some() {
+    //     let mut printer = Printer::new(200, 385, 0);
+    //     write!(printer, "base_addr: ").unwrap();
+    //
     //     let base_addr = base_addr_opt.unwrap();
     //     let mut printer = Printer::new(300, 385, 0);
+    //     write!(printer, "{:x}", base_addr.base_addr()).unwrap();
     // }
+    // let mut printer = Printer::new(300, 485, 0);
+    // write!(printer, "{:?}", "initializing xhci").unwrap();
     // xhci::initialize_xhci();
+    // let mut printer = Printer::new(300, 500, 0);
+    // write!(printer, "{:?}", "initialized xhci").unwrap();
     let mut idx: u32 = 10;
 
     loop {

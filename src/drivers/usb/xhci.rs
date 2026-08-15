@@ -335,6 +335,7 @@ pub fn initialize_xhci() -> Result<(), ()> {
         write!(printer, "{:x}", doorbell_base_addr).unwrap();
 
 
+        // Host Controller Initialization
         // USBSTS.HCHがoff(halted)である場合、USBCMD.R/Sを0に
         if !UsbSts::read_from_reg(operational_base_addr).hch_is_on() {
             UsbCmd::read_from_reg(operational_base_addr).set_stop();
